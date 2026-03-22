@@ -112,7 +112,7 @@ Bad behavior:
 
 1. Clone the repository.
 2. Load or symlink the repo into your local skill setup.
-3. Start with prompts like:
+3. Start with prompts like these in German or English:
 
 ```text
 Ich will meine Steuererklaerung fuer 2025 vorbereiten.
@@ -120,6 +120,12 @@ Was kann ich fuer Homeoffice, Pendeln und meinen Laptop absetzen?
 Wir bekommen ein Baby. Was aendert sich steuerlich dieses Jahr und naechstes Jahr?
 Bitte erklaere mir meinen Steuerbescheid.
 Bitte sortiere meinen Steuerordner und sag mir, was fehlt.
+
+I want to prepare my 2025 German tax return.
+What can I deduct for working from home, commuting, and my laptop?
+We're having a baby. What changes tax-wise this year and next year?
+Please explain my German tax assessment notice.
+Please sort my tax documents and tell me what is missing.
 ```
 
 ### Develop and verify locally
