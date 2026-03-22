@@ -3,121 +3,34 @@ TaxDE Refund Calculator
 Maintains a running refund estimate with confidence scoring.
 All formulas are based on German income tax law (EStG).
 
-2024 / 2025 tax parameters — verify annually against BMF publications.
+Bundled rules cover 2024-2026 and should still be cross-checked against the
+latest BMF publications before filing.
 """
 
 from __future__ import annotations
-import math
+
 from typing import Optional
 
-# ── 2024 Tax Parameters ───────────────────────────────────────────────────────
+try:
+    from tax_rules import (
+        calculate_income_tax,
+        calculate_soli,
+        coerce_receipt_deductible_amount,
+        get_tax_year_rules,
+        resolve_supported_year,
+    )
+except ImportError:
+    import os
+    import sys
 
-PARAMS_2024 = {
-    "grundfreibetrag": 11_604,          # § 32a EStG
-    "spitzensteuersatz_threshold": 66_761,
-    "reichensteuersatz_threshold": 277_826,
-    "soli_freigrenze_single": 18_130,   # est. income tax above which Soli kicks in
-    "kirchensteuer_rate_bw": 0.08,
-    "kirchensteuer_rate_other": 0.09,
-    "arbeitnehmer_pauschbetrag": 1_230,  # § 9a EStG
-    "sonderausgaben_pauschbetrag": 36,   # § 10c EStG (single; double for married)
-    "homeoffice_tagespauschale": 6,      # € per day, § 4 Abs 5 Nr 6b EStG
-    "homeoffice_max_days": 210,
-    "homeoffice_max_annual": 1_260,      # 210 × 6
-    "pendlerpauschale_short": 0.30,      # €/km, first 20 km
-    "pendlerpauschale_long": 0.38,       # €/km, beyond 20 km
-    "pendlerpauschale_max_pkw": None,    # no cap for car
-    "pendlerpauschale_max_oeffentlich": None,
-    "sparer_pauschbetrag_single": 1_000, # § 20 Abs 9 EStG
-    "sparer_pauschbetrag_married": 2_000,
-    "riester_max": 2_100,
-    "ruerup_max_pct": 0.90,             # 90% of actual contribution deductible in 2024
-    "ruerup_bbg_rv": 90_600,            # Beitragsbemessungsgrenze RV West
-    "bav_4pct_bbg": 3_624,              # 4% of BBG RV — steuer & SV free
-    "bav_4pct_extra": 1_800,            # additional 4% BBG — steuer free only
-    "kindergeld_per_child": 250,         # € / month per child (first two)
-    "kinderfreibetrag_child": 3_192,    # per parent (×2 for couple) — Sachbedarf
-    "kinderfreibetrag_bea": 1_464,      # Betreuungs- und Erziehungsfreibetrag per parent
-    "kinderbetreuung_max": 4_000,       # § 10 Abs 1 Nr 5 EStG, 2/3 of up to €6,000
-    "ausbildungsfreibetrag": 1_200,
-    "entlastungsbetrag_alleinerziehende": 4_260,
-    "pflegepauschbetrag_pf1": 600,
-    "pflegepauschbetrag_pf2": 1_100,
-    "pflegepauschbetrag_pf3": 1_800,
-    "behindertenpauschbetrag": {        # GdB → annual amount
-        20: 384, 30: 620, 40: 860, 50: 1_140, 60: 1_440,
-        70: 1_780, 80: 2_120, 90: 2_460, 100: 2_840,
-        "blind_helpless": 7_400,
-    },
-}
-
-PARAMS_2025 = {
-    **PARAMS_2024,
-    "grundfreibetrag": 12_096,           # planned increase
-    "arbeitnehmer_pauschbetrag": 1_230,  # confirm when BMF publishes
-    "homeoffice_tagespauschale": 6,      # unchanged as of spec date
-    "spitzensteuersatz_threshold": 68_430,  # estimated inflation adj.
-}
-
-
-def _get_params(year: int = 2024) -> dict:
-    return PARAMS_2025 if year >= 2025 else PARAMS_2024
-
-
-# ── Progressive Tax Formula §32a EStG ────────────────────────────────────────
-
-def _tax_32a(zve: float, year: int = 2024) -> float:
-    """
-    Compute income tax on zu versteuerndes Einkommen using the official
-    §32a EStG piecewise polynomial formula (2024 values).
-    Returns the absolute tax amount (before Kindergeld set-off, Soli, KiSt).
-    """
-    if zve <= 0:
-        return 0.0
-
-    p = _get_params(year)
-    gfb = p["grundfreibetrag"]
-    z1 = p.get("zone1_upper", 17_005)    # Progressionszone 1 upper bound 2024
-    z2 = p.get("zone2_upper", 66_760)    # Proportionalzone upper bound 2024
-    z3 = p.get("spitzensteuersatz_threshold", 66_761)
-    z4 = p.get("reichensteuersatz_threshold", 277_826)
-
-    # Hardcode 2024 §32a formula brackets
-    if year <= 2024:
-        if zve <= 11_604:
-            return 0.0
-        elif zve <= 17_005:
-            y = (zve - 11_604) / 10_000
-            return (979.18 * y + 1_400) * y
-        elif zve <= 66_760:
-            z = (zve - 17_005) / 10_000
-            return (192.59 * z + 2_397) * z + 966.53
-        elif zve <= 277_825:
-            return 0.42 * zve - 10_602.13
-        else:
-            return 0.45 * zve - 18_936.88
-    else:
-        # 2025 placeholder — update with official formula when published
-        if zve <= 12_096:
-            return 0.0
-        elif zve <= 17_430:
-            y = (zve - 12_096) / 10_000
-            return (979.18 * y + 1_400) * y
-        elif zve <= 68_430:
-            z = (zve - 17_430) / 10_000
-            return (192.59 * z + 2_397) * z + 966.53
-        elif zve <= 277_825:
-            return 0.42 * zve - 10_602.13
-        else:
-            return 0.45 * zve - 18_936.88
-
-
-def _soli(tax: float, year: int = 2024) -> float:
-    """Solidaritätszuschlag — 5.5% of income tax above threshold."""
-    freigrenze = 18_130 if year <= 2024 else 18_916
-    if tax <= freigrenze:
-        return 0.0
-    return min(tax * 0.055, (tax - freigrenze) * 0.119)  # Milderungszone
+    sys.path.insert(0, os.path.dirname(__file__))
+    from tax_rules import (
+        calculate_income_tax,
+        calculate_soli,
+        coerce_receipt_deductible_amount,
+        get_tax_year_rules,
+        resolve_supported_year,
+    )
 
 
 # ── Main Calculator ───────────────────────────────────────────────────────────
@@ -130,8 +43,9 @@ def calculate_refund(profile: dict, deductions: Optional[dict] = None) -> dict:
     deductions: optional override dict; keys match deduction categories.
                 If None, deductions are estimated from profile alone.
     """
-    year = profile.get("meta", {}).get("tax_year", 2024)
-    p = _get_params(year)
+    requested_year = profile.get("meta", {}).get("tax_year", 2024)
+    year, year_note = resolve_supported_year(requested_year)
+    p = get_tax_year_rules(year)
     emp = profile.get("employment", {})
     fam = profile.get("family", {})
     housing = profile.get("housing", {})
@@ -149,6 +63,10 @@ def calculate_refund(profile: dict, deductions: Optional[dict] = None) -> dict:
     confidence = 100
     confidence_detractors = []
     missing_data_impact = []
+
+    if year_note:
+        confidence -= 10
+        confidence_detractors.append(year_note)
 
     # ── Werbungskosten ────────────────────────────────────────────────────────
     werbungskosten = 0.0
@@ -182,13 +100,14 @@ def calculate_refund(profile: dict, deductions: Optional[dict] = None) -> dict:
     # Arbeitsmittel (from receipt log)
     receipts = profile.get("current_year_receipts", [])
     arbeitsmittel = sum(
-        r.get("amount", 0) * r.get("business_use_pct", 100) / 100
+        coerce_receipt_deductible_amount(r, year)
         for r in receipts if r.get("category") == "equipment"
     )
 
     # Fortbildung
     fortbildung = sum(
-        r.get("amount", 0) for r in receipts if r.get("category") == "fortbildung"
+        coerce_receipt_deductible_amount(r, year)
+        for r in receipts if r.get("category") == "fortbildung"
     )
 
     # Gewerkschaft
@@ -212,7 +131,13 @@ def calculate_refund(profile: dict, deductions: Optional[dict] = None) -> dict:
     # Rürup
     ruerup_contrib = ins.get("ruerup_contribution") or 0.0
     if ins.get("ruerup"):
-        ruerup_deductible = min(ruerup_contrib * p["ruerup_max_pct"], p["ruerup_bbg_rv"] * 0.284)
+        ruerup_cap = p.get("ruerup_max_single")
+        ruerup_deductible = ruerup_contrib if ruerup_cap is None else min(ruerup_contrib, ruerup_cap)
+        if ruerup_cap is None:
+            confidence -= 5
+            confidence_detractors.append(
+                f"{year} Ruerup annual ceiling is not bundled — refund assumes the entered contribution is deductible."
+            )
         sonderausgaben += ruerup_deductible
 
     # bAV
@@ -228,7 +153,7 @@ def calculate_refund(profile: dict, deductions: Optional[dict] = None) -> dict:
         child_age = year - birth_year if birth_year else 99
         if child_age < 14 and child.get("kita"):
             cost = child.get("kita_annual_cost") or 0.0
-            kita_total += min(cost * 2 / 3, p["kinderbetreuung_max"])
+            kita_total += min(cost * p["kinderbetreuung_pct"], p["kinderbetreuung_max"])
     sonderausgaben += kita_total
 
     # Donations from receipts
@@ -271,22 +196,22 @@ def calculate_refund(profile: dict, deductions: Optional[dict] = None) -> dict:
 
     # Splitting for married couples
     if married:
-        tax = _tax_32a(zve / 2, year) * 2
+        tax = calculate_income_tax(zve / 2, year) * 2
     else:
-        tax = _tax_32a(zve, year)
+        tax = calculate_income_tax(zve, year)
 
     # Kinderfreibetrag Günstigerprüfung
     if children:
         zve_with_kfb = max(0, zve - kinderfreibetrag_total)
         if married:
-            tax_with_kfb = _tax_32a(zve_with_kfb / 2, year) * 2
+            tax_with_kfb = calculate_income_tax(zve_with_kfb / 2, year) * 2
         else:
-            tax_with_kfb = _tax_32a(zve_with_kfb, year)
+            tax_with_kfb = calculate_income_tax(zve_with_kfb, year)
         kfb_advantage = tax - tax_with_kfb - kindergeld_annual
         if kfb_advantage > 0:
             tax = tax_with_kfb  # Günstigerprüfung → KFB is better
 
-    soli = _soli(tax, year)
+    soli = calculate_soli(tax, year)
     total_tax_due = tax + soli
 
     # Estimate LSt already paid (simplified — should come from Lohnsteuerbescheinigung)
@@ -370,26 +295,26 @@ def _estimate_lohnsteuer_paid(gross: float, steuerklasse: str,
         return None
     # Use the actual tax formula with Steuerklasse-specific deductions
     # This is an approximation — real LSt uses monthly tables
-    p = _get_params(year)
+    p = get_tax_year_rules(year)
     if steuerklasse == "III":
         wk = p["arbeitnehmer_pauschbetrag"]
         sa = p["sonderausgaben_pauschbetrag"] * 2
         zve = max(0, gross * 2 - wk - sa)
-        return _tax_32a(zve / 2, year)
+        return calculate_income_tax(zve / 2, year)
     elif steuerklasse in ("I", "IV"):
         wk = p["arbeitnehmer_pauschbetrag"]
         sa = p["sonderausgaben_pauschbetrag"]
         zve = max(0, gross - wk - sa)
-        return _tax_32a(zve, year)
+        return calculate_income_tax(zve, year)
     elif steuerklasse == "II":
         wk = p["arbeitnehmer_pauschbetrag"]
         sa = p["sonderausgaben_pauschbetrag"]
         entl = p["entlastungsbetrag_alleinerziehende"]
         zve = max(0, gross - wk - sa - entl)
-        return _tax_32a(zve, year)
+        return calculate_income_tax(zve, year)
     elif steuerklasse == "V":
         # No deductions in V — very high withholding
-        return _tax_32a(max(0, gross), year) * 1.15
+        return calculate_income_tax(max(0, gross), year) * 1.15
     return None
 
 

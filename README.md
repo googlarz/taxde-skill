@@ -1,165 +1,293 @@
-# TaxDE Skill
+# TaxDE Skill v1.1
 
-**The financial advisor the German middle class never had access to.**
+TaxDE is a local Claude/Codex skill for German tax optimization, filing preparation, and year-round financial decisions with tax impact. It is the reasoning layer before ELSTER: find deductions, quantify trade-offs, prepare the right numbers, review the Bescheid, and hand off complex cases cleanly when needed.
 
-TaxDE Skill is a Claude Code skill that turns every tax conversation into a guided optimization session — with a live visual dashboard rendered as a Claude artifact alongside the chat.
+Version 1.1 turns the repo into a stronger, safer release:
 
----
+- refreshed README and skill guidance with clearer trust boundaries
+- bundled 2024-2026 tax rules and filing deadline helpers
+- safer equipment and childcare handling in the calculator flow
+- project-scoped profile storage instead of pretending to use shared memory
+- a proposal-based updater that checks official BMF sources without silently rewriting the repo
 
-## What it does
+This repo combines:
 
-Most Germans leave €500–€2,000 on the table every year. TaxDE Skill fixes that.
+- the operating prompt in [`SKILL.md`](./SKILL.md)
+- shared tax-year logic in [`scripts/tax_rules.py`](./scripts/tax_rules.py)
+- refund estimation in [`scripts/refund_calculator.py`](./scripts/refund_calculator.py)
+- deadline handling in [`scripts/tax_dates.py`](./scripts/tax_dates.py)
+- receipt logging in [`scripts/receipt_logger.py`](./scripts/receipt_logger.py)
+- document sorting in [`scripts/document_sorter.py`](./scripts/document_sorter.py)
+- project-scoped profile storage in [`scripts/profile_manager.py`](./scripts/profile_manager.py)
 
-It goes beyond filling in ELSTER fields. It hunts for deductions you didn't know existed, models scenarios before you make life decisions, flags law changes before they cost you money, and hands you off to a Steuerberater with a full briefing — not just "see a professional."
+Current bundled support is for tax years 2024, 2025, and 2026.
 
-**8 operating modes**, detected automatically from context:
+## Why This Repo Exists
 
-| Mode | Triggered by |
-|------|-------------|
-| Year-Round Advisor | Any tax question, any time |
-| Deduction Hunter | "What can I claim?" / start of filing season |
-| Scenario Simulator | "What if I…" / life decisions |
-| Guided Filing | "Help me file" / ELSTER walkthrough |
-| Post-Assessment Review | Steuerbescheid arrives |
-| Receipt Capture | Ongoing expense logging |
-| Financial Blind Spot Scanner | Insurance, investments, fees |
-| Life Transition Intelligence | Baby, marriage, new job, moving |
+Most tax tools are either:
 
----
+- form fillers that only optimize what the user already knows to mention
+- calculators without memory or workflow
+- high-trust legal/commercial products that are expensive or overkill for basic planning
 
-## Artifact + Chat
+TaxDE is built for the gap in between:
 
-Every session uses both panels:
+- answer the question the user asked
+- quantify it with real numbers
+- find the next thing they did not know to ask
+- keep the reasoning transparent
+- stop pretending when the case needs a Steuerberater
 
-- **Chat** — TaxDE Skill explains, empathizes, asks questions, celebrates wins ("That's €840 you would have missed")
-- **Artifact** — A live HTML tax dashboard: estimated refund, itemized deductions with confidence signals, countdown to Abgabefrist, personalized tips. Regenerates whenever meaningful new data arrives.
+## What TaxDE Actually Does
 
----
+| Workflow | What the user gets | Main backing files |
+|----------|--------------------|--------------------|
+| Deduction hunt | likely deductions, missing-data gaps, refund estimate | `SKILL.md`, `references/deduction-rules.md`, `scripts/refund_calculator.py` |
+| Guided filing | preparation for ELSTER fields and forms | `references/elster-guide.md`, `scripts/tax_dates.py` |
+| Scenario modeling | before/after comparison for life or work decisions | `references/scenarios.md`, `scripts/refund_calculator.py` |
+| Receipt capture | structured expense logging and deductible treatment | `scripts/receipt_logger.py`, `scripts/tax_rules.py` |
+| Document intake | sorted tax folders and missing-document summary | `scripts/document_sorter.py` |
+| Bescheid review | plain-language review and Einspruch orientation | `SKILL.md`, `scripts/profile_manager.py` |
+| Profile continuity | project-local memory of tax facts and filing history | `scripts/profile_manager.py` |
 
-## How it compares
+## What Makes It Trustworthy
 
-Each tool has a different job. Here's an honest breakdown:
+- Hard numbers come from scripts, not prompt memory.
+- Supported-year thresholds and formulas are centralized instead of duplicated across prompt text.
+- Filing deadlines are resolved through code, not hand-written reminder copy.
+- Expensive work equipment is treated conservatively and annualized when required.
+- The skill explicitly distinguishes:
+  - deductible amount
+  - reduction in taxable income
+  - estimated cash refund
+- The repo degrades honestly outside 2024-2026 instead of pretending unsupported years are exact.
+- Profile data is project-scoped and does not claim magical cloud memory.
+- The skill includes handoff rules for cases that should not be improvised.
+- Core behavior is covered by tests.
 
-**ELSTER** (free, official)
-The authoritative source — direct submission, legally binding, no cost. But purely a form interface: no guidance, no deduction suggestions, no explanations. You need to know what you're doing. TaxDE Skill is designed to prepare you for ELSTER, not replace it.
+## Where It Fits
 
-**Taxfix / SteuerGo** (€30–50/year)
-Fast, mobile-friendly, genuinely good for straightforward employed cases. Interview-style flow covers the main deductions. Where they fall short: the questions only go as deep as you answer. If you don't know homeoffice is claimable, they won't find it. No year-round use, no "what if" modeling, no life event strategy.
+Use TaxDE when you want to reason before filing:
 
-**WISO Steuer** (€30–50/year)
-The most capable traditional tax app — handles complex situations, has scenario tools, updates annually for law changes, good document import. Solid choice for anyone who wants a proven, licensed product. Limitation: still form-centric. It optimizes *within* what you tell it; it doesn't proactively reason about your whole financial situation.
+- `What can I deduct?`
+- `How much is this actually worth for me?`
+- `Should I change anything before year-end?`
+- `What does this Steuerbescheid mean?`
+- `Which ELSTER fields matter for my case?`
 
-**TaxDE Skill** (free, runs in Claude Code)
-Not a replacement for any of the above — a different layer. Where it adds value:
+Use ELSTER, WISO, or a Steuerberater when you need:
 
-- **Proactive reasoning**: asks follow-up questions you didn't know to ask, connects deductions across categories
-- **Year-round**: receipt logging, December Sprint, law change alerts, not just filing season
-- **Beyond taxes**: salary negotiation, company car math, GKV comparison, investment fee analysis
-- **Life events**: full multi-year impact, not just "did your situation change?"
-- **Explains the math**: every number shown with the formula behind it
+- formal submission
+- product-grade import/export and filing workflows
+- licensed professional advice for high-risk or specialist cases
 
-**Honest limitations of TaxDE Skill**: no direct ELSTER submission (guides you, you submit yourself), no customer support team. For complex cases it refers you to a Steuerberater rather than handling them itself.
+The practical split is simple: TaxDE finds, explains, and prepares; another tool or a professional submits or handles edge-case law.
 
-**The practical split most people end up with**: TaxDE Skill to find everything, understand what's claimable and why, prepare the numbers — then ELSTER or WISO to submit.
+## How TaxDE Should Behave
 
----
+The skill is strongest when it follows this response contract:
 
-## Install
+1. Start with the number, decision, or deadline impact.
+2. Show the math in plain language.
+3. Label the confidence and the main assumption.
+4. Surface one adjacent deduction, risk, or next move if it is genuinely relevant.
+5. End with one focused next step instead of generic filler.
+
+Good behavior:
+
+- `Homeoffice: 138 days x EUR 6 = EUR 828 deductible. Likely.`
+- `This is a deduction, not EUR 828 cash back. Your refund effect depends on your tax rate.`
+- `For 2027 I can only give a fallback estimate unless we verify the current official rules.`
+
+Bad behavior:
+
+- quoting a filing deadline from memory
+- treating a deduction amount as the refund amount
+- giving unsupported-year numbers as if they were exact
+- skipping the handoff when the case is clearly too complex
+
+## Quick Start
+
+### Use it as a skill
+
+1. Clone the repository.
+2. Load or symlink the repo into your local skill setup.
+3. Start with prompts like:
+
+```text
+Ich will meine Steuererklaerung fuer 2025 vorbereiten.
+Was kann ich fuer Homeoffice, Pendeln und meinen Laptop absetzen?
+Wir bekommen ein Baby. Was aendert sich steuerlich dieses Jahr und naechstes Jahr?
+Bitte erklaere mir meinen Steuerbescheid.
+Bitte sortiere meinen Steuerordner und sag mir, was fehlt.
+```
+
+### Develop and verify locally
 
 ```bash
-claude skill install taxde.skill
+python3 -m unittest discover -s tests -v
+python3 -m compileall scripts tests
+python3 scripts/refund_calculator.py
+python3 scripts/receipt_logger.py
+python3 scripts/document_sorter.py
 ```
 
-Then just start talking:
+## Supported Scope
 
-```
-steuern                    → starts a new session
-homeoffice absetzen        → jumps straight to Homeoffice calculation
-ich habe ein baby bekommen → Life Transition mode
-what can I deduct?         → Deduction Hunter
-```
+Strong in-repo support:
 
----
+- employees and common family cases
+- homeoffice, commuting, work equipment, training, donations
+- childcare and pension contribution orientation
+- side income, freelancers, and mixed-income households
+- filing preparation and post-assessment review
+- life-event modeling across the next 1-3 years
 
-## What's inside
+Handled conservatively:
 
-```
-taxde/
-├── SKILL.md                          # Main skill (17 sections)
-├── scripts/
-│   ├── profile_manager.py            # Persistent tax profile (memory)
-│   ├── refund_calculator.py          # §32a EStG formula, confidence scoring
-│   ├── receipt_logger.py             # Year-round expense tracking
-│   └── document_sorter.py           # OCR + auto-classification of tax docs
+- years outside 2024-2026
+- missing-data estimates
+- expat or cross-border orientation before specialist review
+
+Mandatory handoff territory:
+
+- US citizenship plus German residency
+- complex equity compensation from foreign employers
+- 3 or more tax countries in one year
+- exit taxation
+- high-stakes GmbH structuring or reorganization work
+
+## Accuracy Model
+
+- The repo bundles tax rules. It does not auto-update from official sources.
+- For supported years, use the bundled rules and code helpers.
+- For `latest`, `current`, `today`, or unsupported years, verify against official sources when available.
+- If official verification is not available, the limitation should be stated plainly.
+- References in `references/` support reasoning and explanations. They are not a substitute for shared coded constants in `scripts/`.
+
+If this repo ever drifts, update the code first and the copy second.
+
+## Privacy and Storage
+
+TaxDE stores structured facts in `.taxde/taxde_profile.json` inside the active project.
+
+Stored:
+
+- tax profile facts
+- filing history
+- current-year receipts
+- relevant notes tied to the user's tax situation
+
+Not stored in the profile JSON:
+
+- raw document bodies
+- bank credentials
+- passwords
+- identity documents
+
+Older installs may still read `~/.claude/projects/taxde_profile.json` as a legacy fallback.
+
+## Optional Dependencies
+
+Core tax logic uses the Python standard library. Document extraction improves if these are installed:
+
+- `pdfplumber`
+- `pypdf`
+- `Pillow`
+- `pytesseract`
+
+OCR also requires a working Tesseract installation on the host machine.
+
+## Repository Layout
+
+```text
+taxde-skill/
+├── SKILL.md
+├── README.md
+├── assets/
+│   ├── folder_structure_template.md
+│   ├── steuerberater_handoff.md
+│   └── tax_dashboard_template.html
 ├── references/
-│   ├── deduction-rules.md            # 2024/2025 rules, Pauschalen, limits
-│   ├── life-events.md                # 12 major life events, full tax impact
-│   ├── scenarios.md                  # 10 simulator templates
-│   ├── elster-guide.md               # Field-by-field ELSTER walkthrough
-│   ├── expat-guide.md                # DBA treaties, international situations
-│   ├── freelancer-guide.md           # EÜR, Gewerbesteuer, Umsatzsteuer
-│   ├── financial-blind-spots.md      # Beyond-tax money leaks
-│   └── law-change-monitoring.md      # How to track and communicate changes
-└── assets/
-    ├── folder_structure_template.md  # Suggested document folder structure
-    └── steuerberater_handoff.md      # Professional hand-off template
+│   ├── deduction-rules.md
+│   ├── elster-guide.md
+│   ├── expat-guide.md
+│   ├── financial-blind-spots.md
+│   ├── freelancer-guide.md
+│   ├── law-change-monitoring.md
+│   ├── life-events.md
+│   └── scenarios.md
+├── scripts/
+│   ├── document_sorter.py
+│   ├── profile_manager.py
+│   ├── receipt_logger.py
+│   ├── refund_calculator.py
+│   ├── tax_dates.py
+│   └── tax_rules.py
+└── tests/
+    ├── test_document_sorter.py
+    ├── test_refund_calculator.py
+    ├── test_tax_dates.py
+    └── test_tax_rules.py
 ```
 
----
+## Maintainer Rules
 
-## Key features
+When tax law changes or the skill starts drifting, update the repo in this order:
 
-**Leads with your number, not abstract rules.**
-"210 Tage × €6 = €1.260 für dich" — not "up to €1,260."
+1. `scripts/tax_rules.py`
+2. `scripts/tax_dates.py` if filing deadlines changed
+3. any affected helper logic in `scripts/`
+4. the matching tests in `tests/`
+5. the user-facing references in `references/`
+6. `SKILL.md` and `README.md`
 
-**Proactive by default.**
-Every answer triggers an Opportunity Scan. If you mention Homeoffice, TaxDE Skill also checks your commute, your equipment, your union membership.
+Maintainer guardrails:
 
-**Confidence signals on every claim.**
-✅ Definitive (§ cited) / ⚠️ Likely / 🔶 Debatable / ❌ Avoid
+- do not patch numbers in prompt text and forget the code
+- do not update references without updating tests for the changed rule
+- do not cite unsupported years as exact
+- do not silently change the trust model or storage behavior
 
-**December Sprint mode.**
-Every November, TaxDE Skill surfaces every year-end move still available — with exact euro amounts and deadlines.
+## Safe Update Pipeline
 
-**Steuerberater hand-off, not dismissal.**
-Complex cases (US citizenship, RSUs, 3+ countries) get a full briefing package — specific questions to ask, documents to bring, estimated fee range. Never just "see a professional."
+This repo now includes a proposal-based updater in [`scripts/tax_rule_updater.py`](./scripts/tax_rule_updater.py).
 
-**Privacy first.**
-Stores only a structured JSON summary in Claude memory. No raw documents, no IBANs, no passwords. Delete everything with "delete my TaxDE Skill profile."
+Use it like this:
 
----
-
-## Example session
-
-```
-User:         ich bekomme ein Baby
-TaxDE Skill:  Herzlichen Glückwunsch! Das ändert einiges — hier ist der vollständige
-              Überblick für dieses und die nächsten drei Jahre...
-
-              Sofort (Geburtsjahr):
-              • Kindergeld: €250/Monat ab Geburtsmonat → stell den Antrag in den
-                ersten 6 Monaten (Ausschlussfrist!)
-              • Kinderfreibetrag: €6.612 — ich prüfe automatisch, was für dich
-                besser ist (Günstigerprüfung)
-              • Kita ab nächstem Jahr: 2/3 der Kosten absetzbar, max. €4.000/Kind
-
-              Was die meisten verpassen:
-              • Steuerklassenwechsel zu III/V wenn ein Elternteil Elterngeld bezieht
-                kann €X/Monat mehr Netto bedeuten — soll ich das durchrechnen?
-
-[Artifact updates: refund estimate +€640, Kinderfreibetrag added to deductions]
+```bash
+python3 scripts/tax_rule_updater.py check
+python3 scripts/tax_rule_updater.py draft
+python3 scripts/tax_rule_updater.py apply --proposal-dir .taxde-updates/<timestamp>
 ```
 
----
+What it does:
 
-## Scope and limits
+- fetches tracked official BMF sources
+- extracts supported values for the bundled years
+- compares them to `scripts/tax_rules.py` and `scripts/tax_dates.py`
+- patches a temporary repo copy, updates the relevant tests and reference table, and runs verification there
+- writes a review bundle with `report.md`, `source_snapshot.json`, `proposal.patch`, `verification.log`, and candidate files
 
-TaxDE Skill handles the vast majority of German tax situations: employees, freelancers, expats, retirees, landlords, investors.
+What it does not do:
 
-It refers to a Steuerberater (with full briefing) for: US citizenship + German residency, equity compensation from foreign employers, 3+ countries in one year, GmbH structuring >€100k profit, exit taxation (§6 AStG).
+- it does not silently rewrite the repo
+- it does not auto-merge anything
+- it does not add a fully new supported tax year by magic
 
-Not a substitute for legally binding Steuerberatung (§ 2 StBerG). TaxDE Skill will tell you this once, clearly, and then get to work.
+That last part is intentional. Adding a new year still needs human review because tariff formulas and year coverage are higher-risk than simple threshold refreshes.
 
----
+## Verification
 
-*Built for Claude Code. Tested against 2024/2025 German tax law.*
+Recommended verification before merging:
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m compileall scripts tests
+python3 scripts/refund_calculator.py
+python3 scripts/receipt_logger.py
+python3 scripts/document_sorter.py
+python3 scripts/tax_rule_updater.py check
+```
+
+The repo should stay useful because the logic, prompt, and docs agree with each other. That is the bar.

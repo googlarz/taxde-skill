@@ -16,7 +16,7 @@ Each event is structured as:
 - **Kindergeld**: Apply at Familienkasse immediately — NOT automatic. Back-pay only 6 months retroactive. Income threshold abolished since 2023 — everyone qualifies regardless of income.
 - **Elterngeld**: Taxable as Lohnersatzleistung → triggers **Progressionsvorbehalt** (raises effective tax rate even though Elterngeld itself is tax-free). This often creates an unexpected Nachzahlung.
 - **Steuerklasse**: If you're married, switching the higher earner to Klasse III (and lower earner to V) can significantly improve net Elterngeld, since Elterngeld is calculated on net income. This switch must happen **before** the last month of working before parental leave.
-- **Kita costs**: Deductible from birth under §10 Abs. 1 Nr. 5 EStG (2/3 of costs, max €4,000/child/year)
+- **Kita costs**: Deductible from birth under §10 Abs. 1 Nr. 5 EStG (2024: 2/3 up to €4,000; 2025+: 80% up to €4,800 per child/year)
 
 ### Following years
 - Kinderbetreuungskosten deductible until child turns 14
@@ -67,7 +67,7 @@ You can still choose between joint (Zusammenveranlagung) and separate (Einzelver
 Also: if one partner is self-employed and has Gewerbesteuer, the §35 offset might interact differently with Splittingtarif.
 
 ### Deadlines
-- File jointly: no earlier than after year end; no later than July 31 (or October 31 with Steuerberater)
+- File jointly: use `scripts/tax_dates.py` for the exact year-specific deadline. Example: an advised 2024 return is due on 2026-04-30.
 - Steuerklasse change: apply to your Wohnsitzfinanzamt; takes effect following month
 
 ### Year-end decisions
@@ -147,7 +147,7 @@ Yes if: multiple properties, large renovation costs, unclear AfA calculation, or
 ### Immediate impact
 - Register at Finanzamt with **Fragebogen zur steuerlichen Erfassung** within 1 month of starting
 - Freiberufler (§18 EStG) vs. Gewerbetreibender (§15 EStG) — key distinction: Freiberufler exempt from Gewerbesteuer
-- Choose Kleinunternehmerregelung (§19 UStG): exempt from VAT if previous year revenue <€22,000 AND current year expected <€50,000 (planned increase to €25,000/€100,000)
+- Choose Kleinunternehmerregelung (§19 UStG): exempt from VAT if previous year revenue <€25,000 AND current year expected <€100,000
 - **EÜR** (Einnahmen-Überschuss-Rechnung): simple income-minus-expenses accounting
 
 ### Tax payments to plan for

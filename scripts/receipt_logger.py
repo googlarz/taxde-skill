@@ -1,20 +1,31 @@
 """
 TaxDE Receipt Logger
 Logs individual receipts throughout the year and maintains running totals.
-All receipts are stored in the taxde_profile under current_year_receipts.
+All receipts are stored in the project TaxDE profile under current_year_receipts.
 """
 
 from __future__ import annotations
-import json
 from datetime import datetime
 from typing import Optional
 
 try:
     from profile_manager import get_profile, update_profile
+    from tax_rules import (
+        calculate_equipment_deduction,
+        coerce_receipt_deductible_amount,
+        equipment_useful_life,
+        get_tax_year_rules,
+    )
 except ImportError:
     import sys, os
     sys.path.insert(0, os.path.dirname(__file__))
     from profile_manager import get_profile, update_profile
+    from tax_rules import (
+        calculate_equipment_deduction,
+        coerce_receipt_deductible_amount,
+        equipment_useful_life,
+        get_tax_year_rules,
+    )
 
 # ── Category definitions ──────────────────────────────────────────────────────
 
@@ -35,7 +46,8 @@ CATEGORIES = {
     "other":        "Sonstiges",
 }
 
-# Thresholds and caps (2024)
+# Thresholds and caps.
+# Year-specific childcare percentages and caps are pulled from tax_rules.py.
 THRESHOLDS = {
     "equipment": {
         "gwg_net": 800,           # GWG threshold net — above this: depreciate over useful life
@@ -55,10 +67,6 @@ THRESHOLDS = {
     "ruerup": {"note": "see refund_calculator for annual max"},
     "internet": {
         "typical_max": 240,       # ~€20/month × 12, ~20% of line rental
-    },
-    "kita": {
-        "deductible_pct": 2/3,
-        "max_per_child": 4_000,   # 2/3 of up to €6,000
     },
     "handwerker": {
         "labor_only_max": 6_000,  # §35a: 20% of up to €6,000 labor = €1,200 credit
@@ -100,19 +108,17 @@ def add_receipt(
     except ValueError:
         date = datetime.now().date().isoformat()
 
-    deductible_amount = round(amount * business_use_pct / 100, 2)
-
+    profile = get_profile() or {}
+    tax_year = profile.get("meta", {}).get("tax_year", datetime.now().year)
     receipt = {
         "date": date,
         "category": category,
         "description": description,
         "amount": round(amount, 2),
         "business_use_pct": business_use_pct,
-        "deductible_amount": deductible_amount,
         "document_ref": document_ref,
     }
-
-    profile = get_profile() or {}
+    receipt["deductible_amount"] = coerce_receipt_deductible_amount(receipt, tax_year)
     receipts = profile.get("current_year_receipts", [])
     receipts.append(receipt)
     update_profile({"current_year_receipts": receipts})
@@ -209,7 +215,6 @@ def check_thresholds() -> list:
             })
         for r in receipts:
             if r.get("category") == "equipment":
-                net = r.get("amount", 0) / 1.19  # rough net of VAT
                 if r.get("amount", 0) > THRESHOLDS["equipment"]["gwg_gross"]:
                     warnings.append({
                         "category": "equipment",
@@ -275,6 +280,8 @@ def _format_receipt_added(receipt: dict, totals: dict, warnings: list) -> str:
     cat_data = totals.get(cat, {})
     cat_total = cat_data.get("deductible_total", 0)
     label = CATEGORIES.get(cat, cat)
+    tax_year = (get_profile() or {}).get("meta", {}).get("tax_year", datetime.now().year)
+    year_rules = get_tax_year_rules(tax_year)
 
     lines = [
         f"✅ Receipt logged: {receipt['description']}",
@@ -286,8 +293,13 @@ def _format_receipt_added(receipt: dict, totals: dict, warnings: list) -> str:
     # Category-specific tips
     if cat == "equipment":
         if receipt["amount"] > THRESHOLDS["equipment"]["gwg_gross"]:
-            years = _gwg_useful_life(receipt["description"])
-            annual = receipt["amount"] / years
+            years = equipment_useful_life(receipt["description"])
+            annual = calculate_equipment_deduction(
+                receipt["amount"],
+                receipt["description"],
+                receipt.get("business_use_pct", 100.0),
+                tax_year,
+            )
             lines.append(f"   ℹ️  Above GWG (€952 gross) → depreciate over {years} years: €{annual:,.2f}/year")
         else:
             lines.append(f"   ℹ️  Below GWG — fully deductible in year of purchase")
@@ -303,32 +315,17 @@ def _format_receipt_added(receipt: dict, totals: dict, warnings: list) -> str:
         else:
             lines.append(f"   ⚠️  Over €300 — Zuwendungsbestätigung from the charity required")
 
+    elif cat == "kita":
+        pct = int(year_rules["kinderbetreuung_pct"] * 100)
+        cap = year_rules["kinderbetreuung_max"]
+        lines.append(f"   ℹ️  {pct}% deductible for tax year {tax_year}, up to €{cap:,.0f} per child")
+
     if warnings:
         lines.append("")
         for w in warnings[:2]:  # Show max 2 warnings
             lines.append(f"   ⚠️  {w['message']}")
 
     return "\n".join(lines)
-
-
-def _gwg_useful_life(description: str) -> int:
-    """Estimate useful life in years for common equipment."""
-    desc = description.lower()
-    if any(k in desc for k in ["laptop", "computer", "notebook", "macbook"]):
-        return 3
-    if any(k in desc for k in ["monitor", "bildschirm", "display"]):
-        return 3
-    if any(k in desc for k in ["drucker", "printer", "scanner"]):
-        return 3
-    if any(k in desc for k in ["handy", "smartphone", "telefon", "phone"]):
-        return 3
-    if any(k in desc for k in ["schreibtisch", "desk", "stuhl", "chair"]):
-        return 13
-    if any(k in desc for k in ["kamera", "camera"]):
-        return 7
-    return 3  # default for tech equipment
-
-
 if __name__ == "__main__":
     from profile_manager import delete_profile, update_profile as up
     delete_profile()

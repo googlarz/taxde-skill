@@ -1,6 +1,6 @@
 """
 TaxDE Profile Manager
-Reads and writes the taxde_profile from Claude's memory system.
+Reads and writes the TaxDE profile from project-scoped storage.
 All tax profile data is stored as structured JSON — never raw documents.
 """
 
@@ -9,9 +9,9 @@ import os
 from datetime import datetime
 from typing import Optional
 
-# Memory file path — Claude Code persists this across sessions
-MEMORY_DIR = os.path.expanduser("~/.claude/projects")
-PROFILE_KEY = "taxde_profile"
+LEGACY_PROFILE_PATH = os.path.expanduser("~/.claude/projects/taxde_profile.json")
+PROFILE_DIRNAME = ".taxde"
+PROFILE_FILENAME = "taxde_profile.json"
 
 # ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -109,32 +109,34 @@ RECEIPT_SCHEMA = {
     "description": None,
     "amount": None,
     "business_use_pct": 100.0,
+    "deductible_amount": None,
     "document_ref": None
 }
 
 # ── Storage helpers ────────────────────────────────────────────────────────────
 
 def _get_profile_path() -> str:
-    """Return the path where the profile JSON is stored."""
-    # Try to find the Claude projects memory dir; fall back to a local .taxde dir
-    candidates = [
-        os.path.expanduser("~/.claude/projects/taxde_profile.json"),
-        os.path.join(os.path.dirname(__file__), "..", ".taxde_profile.json"),
-    ]
-    # Return first path whose parent dir exists, else default
-    for path in candidates:
-        if os.path.isdir(os.path.dirname(path)):
-            return path
-    os.makedirs(os.path.dirname(candidates[0]), exist_ok=True)
-    return candidates[0]
+    """Return the preferred path for the project-scoped profile JSON."""
+    explicit_path = os.environ.get("TAXDE_PROFILE_PATH")
+    if explicit_path:
+        return os.path.abspath(os.path.expanduser(explicit_path))
+
+    project_dir = (
+        os.environ.get("TAXDE_PROJECT_DIR")
+        or os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.getcwd()
+    )
+    project_dir = os.path.abspath(os.path.expanduser(project_dir))
+    return os.path.join(project_dir, PROFILE_DIRNAME, PROFILE_FILENAME)
 
 
 def _load_raw() -> dict:
-    path = _get_profile_path()
-    if not os.path.exists(path):
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    preferred_path = _get_profile_path()
+    for path in (preferred_path, LEGACY_PROFILE_PATH):
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    return {}
 
 
 def _save_raw(data: dict) -> None:
@@ -206,10 +208,10 @@ def add_filing_year(filing_data: dict) -> dict:
 
 def delete_profile() -> bool:
     """Delete all profile data. Returns True if successful."""
-    path = _get_profile_path()
-    if os.path.exists(path):
-        os.remove(path)
-        return True
+    for path in (_get_profile_path(), LEGACY_PROFILE_PATH):
+        if os.path.exists(path):
+            os.remove(path)
+            return True
     return False
 
 

@@ -153,14 +153,15 @@ Required in addition to Anlage Vorsorge for Riester.
 | Zeile 4: Identifikationsnummer Kind | Child's tax ID | Request from Finanzamt if unknown |
 | Zeile 5: Geburtsdatum | Birth certificate | |
 | Zeile 18: Kinderfreibetrag Übertragung | Agreement with other parent | If one parent transfers their half |
-| Zeile 31–50: Kinderbetreuungskosten | Kita invoices | 2/3 of total; max €4,000 |
+| Zeile 31–50: Kinderbetreuungskosten | Kita invoices | 2024: 2/3, max €4,000; 2025+: 80%, max €4,800 |
 | Zeile 53: Ausbildungsfreibetrag | If child in Ausbildung away from home | €1,200 |
 
 **Kinderbetreuungskosten section (Zeilen 31–50)**:
 ```
 Zeile 31: Total Kinderbetreuungskosten paid
-The 2/3 deductible amount is calculated automatically
-Maximum: €4,000 per child
+The deductible amount is calculated automatically
+2024 return: 2/3 of costs, maximum €4,000 per child
+2025+ return: 80% of costs, maximum €4,800 per child
 Condition: Child under 14, you must have a Betreuungsnachweis
 ```
 
