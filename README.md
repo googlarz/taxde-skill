@@ -1,16 +1,65 @@
-# TaxDE Skill v1.1
+# TaxDE Skill
 
 **German tax copilot for people who need more than a filing wizard.**
 
-TaxDE is a local Claude/Codex skill for German tax optimization, filing preparation, document triage, decision support, and post-filing review. It is built for the part normal tax apps rarely handle well: reasoning across your whole situation, showing the math, and telling you what matters next.
+TaxDE is a local Claude/Codex skill for German tax optimization, filing preparation, document triage, decision support, and post-filing review. It is built for the part normal tax apps rarely handle well: reasoning across your whole situation, showing the math, telling you what matters next, and now keeping that work in a project-local tax workspace.
 
 If Taxfix-style tools are good at interview flows, TaxDE is good at everything around the flow:
 
 - finding deductions you did not know to ask about
 - modeling decisions before you make them
 - telling you what documents are missing
+- tracking which claims are confirmed, estimated, or still blocked on evidence
+- building filing packs instead of leaving everything trapped in chat history
 - reviewing a Steuerbescheid after it arrives
 - preparing a clean handoff when a Steuerberater is the right move
+
+## Installation
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/googlarz/taxde-skill.git
+cd taxde-skill
+```
+
+### 2. Install Python dependencies
+
+The core logic works on the standard library, but document extraction and OCR are better with the optional Python packages:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+### 3. Install optional system tools for OCR and scanned PDFs
+
+If you want image OCR and scanned-PDF extraction to work well, install:
+
+- `tesseract`
+- `poppler`
+
+Examples:
+
+```bash
+brew install tesseract poppler
+```
+
+or on Debian/Ubuntu:
+
+```bash
+sudo apt-get install tesseract-ocr poppler-utils
+```
+
+### 4. Load it as a local skill
+
+Symlink the repo into your local skill directory, for example:
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+ln -s "$PWD" "${CODEX_HOME:-$HOME/.codex}/skills/taxde"
+```
+
+If your setup uses a different skill path, load or symlink the repo there instead.
 
 ## Why It Feels Different
 
@@ -30,11 +79,15 @@ That makes it much more useful than a form-only app for people with real decisio
 | Situation | What TaxDE does | Why people use it |
 |----------|------------------|-------------------|
 | Starting a return | runs a deduction hunt, estimates refund, flags missing inputs | better than waiting for a wizard to ask the right question |
+| Tax workspace | builds claims, readiness, evidence coverage, and next tasks for the active year | gives the user a persistent working state instead of a one-off chat answer |
+| Annual timeline | shows the current tax phase, next deadline, and seasonal actions | keeps the product useful all year instead of only at filing time |
 | Home office, commute, equipment | calculates the deduction logic and shows the formula | helps users understand what is deductible versus what only reduces taxable income |
 | Marriage, baby, side income, moving | models tax impact this year and next year | useful before life changes turn into tax surprises |
 | Salary package or freelance offer | compares net outcomes, benefits, and tax effect | decision support, not just filing support |
 | Messy tax folder | sorts documents, classifies likely categories, identifies gaps | saves time before filing even starts |
+| Filing prep pack | builds a form-oriented pack with claims, missing docs, and next steps | helps users move into ELSTER or WISO faster |
 | Steuerbescheid arrived | explains what changed and whether a challenge is worth exploring | post-filing value that filing apps usually stop short of |
+| Structured deliverables | builds yearly summaries, claim checklists, missing-doc checklists, and year-end action lists | turns chat into reusable work product |
 | Complex international or equity case | prepares a structured Steuerberater brief | saves paid adviser time instead of sending the user in blind |
 
 ## What Builds Confidence
@@ -42,11 +95,15 @@ That makes it much more useful than a form-only app for people with real decisio
 TaxDE is designed to earn trust in boring, practical ways:
 
 - **Hard numbers come from code**: bundled rules live in [`scripts/tax_rules.py`](./scripts/tax_rules.py), not only in prompt text.
+- **Critical rules have provenance**: [`scripts/rule_registry.py`](./scripts/rule_registry.py) exposes source metadata, freshness state, and deadline provenance.
 - **Deadlines come from code**: filing dates live in [`scripts/tax_dates.py`](./scripts/tax_dates.py), not memory.
 - **Unsupported years are explicit**: the repo supports 2024, 2025, and 2026 and degrades honestly outside that range.
 - **Deductions are labeled correctly**: the skill distinguishes deductible amount, taxable-income reduction, and estimated cash refund.
 - **Equipment handling is conservative**: expensive work equipment is annualized when required instead of being fully expensed by mistake.
 - **Profile storage is local to the project**: no fake shared memory claims; structured data lives in `.taxde/taxde_profile.json`.
+- **Claims and readiness are persisted**: TaxDE writes project-local claims, filing packs, workspaces, and source snapshots under `.taxde/`.
+- **Seasonal guidance is built in**: TaxDE keeps an annual timeline so January, filing season, Bescheid season, and year-end work are treated differently.
+- **Structured outputs exist outside chat**: TaxDE can build a yearly summary, claim checklist, missing-document checklist, filing pack, Bescheid review pack, and adviser briefing.
 - **Updates are reviewable**: the repo includes a safe updater that checks official sources and drafts a patch instead of silently rewriting tax logic.
 - **Core paths are tested**: refund logic, deadlines, document sorting, and updater behavior all have regression tests.
 
@@ -68,11 +125,7 @@ Good output from TaxDE should feel like this:
 
 ## Quick Start
 
-### Use it as a skill
-
-1. Clone the repository.
-2. Load or symlink the repo into your local skill setup.
-3. Start with prompts like these in German or English:
+Start with prompts like these in German or English:
 
 ```text
 Ich will meine Steuererklaerung fuer 2025 vorbereiten.
@@ -130,6 +183,10 @@ TaxDE is strongest for:
 - home office, commuting, work equipment, training, donations
 - childcare and pension contribution orientation
 - side income, freelancers, and mixed-income households
+- claim tracking, readiness scoring, and missing-document triage
+- filing pack generation for ELSTER / WISO preparation
+- Bescheid diffing against what was expected
+- salary package and freelance break-even scenarios
 - filing preparation and post-assessment review
 - life-event modeling across the next 1-3 years
 
@@ -164,20 +221,32 @@ The updater can:
 - patch a temporary repo copy
 - update matching tests and the reference table
 - run verification
-- write a review bundle with patch, source snapshot, and candidate files
+- write a review bundle with patch, source snapshot, change classifications, release notes, and candidate files
+- require explicit reviewer approval before apply
 
 That means TaxDE can stay current without pretending an autonomous rule rewrite is safe.
 
 ## Privacy and Storage
 
-TaxDE stores structured facts in `.taxde/taxde_profile.json` inside the active project.
+TaxDE keeps its working state inside the active project's `.taxde/` directory.
+
+Typical files now include:
+
+- `.taxde/taxde_profile.json`
+- `.taxde/claims/<tax-year>.json`
+- `.taxde/workspace/<tax-year>.json`
+- `.taxde/workspace/<tax-year>-filing-pack.json`
+- `.taxde/workspace/<tax-year>-outputs.json`
+- `.taxde/source_snapshots/*.json`
 
 Stored:
 
 - tax profile facts
 - filing history
 - current-year receipts
-- relevant notes tied to the user's tax situation
+- claims and readiness state
+- filing-pack output
+- archived official-source snapshots
 
 Not stored in the profile JSON:
 
@@ -193,13 +262,25 @@ Older installs may still read `~/.claude/projects/taxde_profile.json` as a legac
 This repo combines prompt logic, deterministic helpers, references, and assets:
 
 - [`SKILL.md`](./SKILL.md): operating prompt for the skill
+- [`scripts/taxde_storage.py`](./scripts/taxde_storage.py): project-local storage for profile, claims, workspace, packs, and source snapshots
 - [`scripts/tax_rules.py`](./scripts/tax_rules.py): bundled year-specific rules
+- [`scripts/rule_registry.py`](./scripts/rule_registry.py): rule values plus provenance and freshness metadata
 - [`scripts/refund_calculator.py`](./scripts/refund_calculator.py): refund and confidence logic
 - [`scripts/tax_dates.py`](./scripts/tax_dates.py): filing deadlines
+- [`scripts/claim_engine.py`](./scripts/claim_engine.py): first-class claim generation and persistence
+- [`scripts/workspace_builder.py`](./scripts/workspace_builder.py): readiness, evidence coverage, and year workspace
+- [`scripts/tax_timeline.py`](./scripts/tax_timeline.py): annual tax timeline and seasonal action planner
+- [`scripts/document_coverage.py`](./scripts/document_coverage.py): expected-vs-present document tracking
+- [`scripts/filing_pack.py`](./scripts/filing_pack.py): ELSTER / WISO preparation pack output
+- [`scripts/bescheid_diff.py`](./scripts/bescheid_diff.py): expected-vs-assessed review helper
+- [`scripts/scenario_engine.py`](./scripts/scenario_engine.py): package comparison and freelance break-even analysis
+- [`scripts/adviser_handoff.py`](./scripts/adviser_handoff.py): specialist handoff trigger and briefing packet
+- [`scripts/output_builder.py`](./scripts/output_builder.py): yearly summary, checklist, review pack, and action-list output suite
 - [`scripts/receipt_logger.py`](./scripts/receipt_logger.py): structured receipt capture
 - [`scripts/document_sorter.py`](./scripts/document_sorter.py): folder sorting and document classification
 - [`scripts/profile_manager.py`](./scripts/profile_manager.py): project-scoped profile storage
 - [`scripts/tax_rule_updater.py`](./scripts/tax_rule_updater.py): safe update proposal pipeline
+- [`scripts/update_sources.py`](./scripts/update_sources.py): official-source snapshot archiving
 - [`references/`](./references): deduction, filing, life-event, scenario, and law-change guides
 - [`assets/`](./assets): dashboard template and handoff assets
 - [`tests/`](./tests): regression coverage for the core helpers
@@ -212,22 +293,13 @@ Recommended verification before merging:
 python3 -m unittest discover -s tests -v
 python3 -m compileall scripts tests
 python3 scripts/refund_calculator.py
+python3 scripts/claim_engine.py
+python3 scripts/workspace_builder.py
+python3 scripts/tax_timeline.py
+python3 scripts/filing_pack.py
+python3 scripts/output_builder.py
+python3 scripts/adviser_handoff.py
 python3 scripts/receipt_logger.py
 python3 scripts/document_sorter.py
 python3 scripts/tax_rule_updater.py check
 ```
-
-## What Comes Next
-
-If you want the north-star version of this product, see [ROADMAP.md](./ROADMAP.md).
-
-That plan turns TaxDE from a strong skill into a true tax workspace with:
-
-- claim objects
-- evidence tracking
-- filing readiness
-- document coverage
-- source provenance
-- richer Bescheid and scenario support
-
-That is the direction that makes TaxDE feel less like a clever chat and more like the best tax product a user has ever worked with.
