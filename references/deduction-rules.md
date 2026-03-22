@@ -1,4 +1,4 @@
-# TaxDE Deduction Rules — 2024 / 2025 Reference
+# TaxDE Deduction Rules — 2024 / 2026 Reference
 
 > **MANDATORY**: Before citing any figure from this file, verify with web_search that it hasn't changed.
 > Use: `"[rule name] [current year] aktuell Änderung"`
@@ -7,41 +7,42 @@
 
 ## Key Thresholds Table
 
-| Item | 2023 | 2024 | 2025 (planned) | Source |
-|------|------|------|----------------|--------|
-| Grundfreibetrag | €10,908 | €11,604 | €12,096 | §32a EStG |
-| Spitzensteuersatz threshold (42%) | €62,810 | €66,761 | ~€68,430 | §32a EStG |
-| Reichensteuersatz threshold (45%) | €277,826 | €277,826 | €277,826 | §32a EStG |
-| Soli exemption (income tax) | ~€17,543 | ~€18,130 | ~€18,916 | SolZG |
-| Arbeitnehmer-Pauschbetrag | €1,230 | €1,230 | €1,230 | §9a EStG |
-| Homeoffice Tagespauschale | €6/day | €6/day | €6/day | §4 V Nr. 6b EStG |
-| Homeoffice max days | 210 | 210 | 210 | §4 V Nr. 6b EStG |
-| Homeoffice max annual | €1,260 | €1,260 | €1,260 | §4 V Nr. 6b EStG |
-| Pendlerpauschale short (≤20 km) | €0.30/km | €0.30/km | €0.30/km | §9 I Nr. 4 EStG |
-| Pendlerpauschale long (>20 km) | €0.38/km | €0.38/km | €0.38/km | §9 I Nr. 4 EStG |
-| Sparer-Pauschbetrag (single) | €1,000 | €1,000 | €1,000 | §20 IX EStG |
-| Sparer-Pauschbetrag (married) | €2,000 | €2,000 | €2,000 | §20 IX EStG |
-| Riester max Sonderausgaben | €2,100 | €2,100 | €2,100 | §10a EStG |
-| Rürup deductible % | 100% | 100% | 100% | §10 I Nr. 2 EStG |
-| Rürup max (BBG RV West × 23.8%) | ~€25,787 | ~€27,565 | tbc | §10 I Nr. 2b EStG |
-| BBG RV West | €87,600 | €90,600 | €96,600 | SGB IV |
-| BBG GKV | €59,850 | €62,100 | €66,150 | SGB V |
-| GKV Grundbeitrag | 14.6% | 14.6% | 14.6% | §241 SGB V |
-| bAV steuer+SV-frei (4% BBG RV) | €3,504 | €3,624 | €3,864 | §3 Nr. 63 EStG |
-| bAV steuerfrei extra (4% BBG) | €1,800 | €1,800 | €1,800 | §3 Nr. 63 EStG |
-| Kinderbetreuung max per child | €4,000 | €4,000 | €4,000 | §10 I Nr. 5 EStG |
-| Kindergeld per child (1st/2nd) | €250/mo | €250/mo | €255/mo | BKGG |
-| Kinderfreibetrag (Sachbedarf/Elternteil) | €3,012 | €3,192 | €3,306 | §32 VI EStG |
-| Kinderfreibetrag (BEA/Elternteil) | €1,464 | €1,464 | €1,464 | §32 VI EStG |
-| GWG threshold (net) | €800 | €800 | €800 | §6 II EStG |
-| Kleinunternehmergrenze | €22,000 (prev year) | €22,000 (prev year) | €25,000 | §19 UStG |
-| Gewerbesteuer Freibetrag | €24,500 | €24,500 | €24,500 | §11 GewStG |
-| Gewerbesteuer §35 EStG offset | 4 × Messbetrag | 4 × Messbetrag | 4 × Messbetrag | §35 EStG |
-| Ausbildungsfreibetrag | €1,200 | €1,200 | €1,200 | §33a EStG |
-| Entlastungsbetrag Alleinerziehende | €4,260 | €4,260 | €4,260 | §24b EStG |
-| Pflegepauschbetrag PG1 | €600 | €600 | €600 | §33b VI EStG |
-| Pflegepauschbetrag PG2 | €1,100 | €1,100 | €1,100 | §33b VI EStG |
-| Pflegepauschbetrag PG3–5 | €1,800 | €1,800 | €1,800 | §33b VI EStG |
+| Item | 2023 | 2024 | 2025 | 2026 | Source |
+|------|------|------|------|------|--------|
+| Grundfreibetrag | €10,908 | €11,784 | €12,096 | €12,348 | §32a EStG / BMF Datensammlung |
+| Spitzensteuersatz threshold (42%) | €62,810 | €66,761 | €68,481 | €69,879 | §32a EStG / BMF Datensammlung |
+| Reichensteuersatz threshold (45%) | €277,826 | €277,826 | €277,826 | €277,826 | §32a EStG |
+| Soli exemption (income tax, single) | ~€17,543 | ~€18,130 | ~€19,950 | ~€20,350 | SolZG / BMF PAP |
+| Arbeitnehmer-Pauschbetrag | €1,230 | €1,230 | €1,230 | €1,230 | §9a EStG |
+| Homeoffice Tagespauschale | €6/day | €6/day | €6/day | €6/day | §4 V Nr. 6b EStG |
+| Homeoffice max days | 210 | 210 | 210 | 210 | §4 V Nr. 6b EStG |
+| Homeoffice max annual | €1,260 | €1,260 | €1,260 | €1,260 | §4 V Nr. 6b EStG |
+| Pendlerpauschale short (≤20 km) | €0.30/km | €0.30/km | €0.30/km | €0.30/km | §9 I Nr. 4 EStG |
+| Pendlerpauschale long (>20 km) | €0.38/km | €0.38/km | €0.38/km | €0.38/km | §9 I Nr. 4 EStG |
+| Sparer-Pauschbetrag (single) | €1,000 | €1,000 | €1,000 | €1,000 | §20 IX EStG |
+| Sparer-Pauschbetrag (married) | €2,000 | €2,000 | €2,000 | €2,000 | §20 IX EStG |
+| Riester max Sonderausgaben | €2,100 | €2,100 | €2,100 | €2,100 | §10a EStG |
+| Rürup deductible % | 100% | 100% | 100% | 100% | §10 I Nr. 2 EStG |
+| Rürup max (single) | €26,528 | €27,566 | €29,344 | verify current BMF table | §10 Abs. 3 EStG tab. Übersicht |
+| BBG RV West | €87,600 | €90,600 | €96,600 | €101,400 | SGB IV / BMF PAP |
+| BBG GKV | €59,850 | €62,100 | €66,150 | €69,750 | SGB V / BMF PAP |
+| GKV Grundbeitrag | 14.6% | 14.6% | 14.6% | 14.6% | §241 SGB V |
+| bAV steuer+SV-frei (4% BBG RV) | €3,504 | €3,624 | €3,864 | €4,056 | §3 Nr. 63 EStG |
+| bAV steuerfrei extra (4% BBG) | €1,800 | €1,800 | €1,800 | €1,800 | §3 Nr. 63 EStG |
+| Kinderbetreuung deductible share | 2/3 | 2/3 | 80% | 80% | §10 I Nr. 5 EStG |
+| Kinderbetreuung max per child | €4,000 | €4,000 | €4,800 | €4,800 | §10 I Nr. 5 EStG |
+| Kindergeld per child | €250/mo | €250/mo | €255/mo | €259/mo | BKGG / BMF 2026 |
+| Kinderfreibetrag (Sachbedarf/Elternteil) | €3,012 | €3,306 | €3,336 | €3,414 | §32 VI EStG / BMF 2026 |
+| Kinderfreibetrag (BEA/Elternteil) | €1,464 | €1,464 | €1,464 | €1,464 | §32 VI EStG |
+| GWG threshold (net) | €800 | €800 | €800 | €800 | §6 II EStG |
+| Kleinunternehmergrenze | €22,000 (prev year) | €22,000 (prev year) | €25,000 | €25,000 | §19 UStG |
+| Gewerbesteuer Freibetrag | €24,500 | €24,500 | €24,500 | €24,500 | §11 GewStG |
+| Gewerbesteuer §35 EStG offset | 4 × Messbetrag | 4 × Messbetrag | 4 × Messbetrag | 4 × Messbetrag | §35 EStG |
+| Ausbildungsfreibetrag | €1,200 | €1,200 | €1,200 | €1,200 | §33a EStG |
+| Entlastungsbetrag Alleinerziehende | €4,260 | €4,260 | €4,260 | €4,260 | §24b EStG |
+| Pflegepauschbetrag PG1 | €600 | €600 | €600 | €600 | §33b VI EStG |
+| Pflegepauschbetrag PG2 | €1,100 | €1,100 | €1,100 | €1,100 | §33b VI EStG |
+| Pflegepauschbetrag PG3–5 | €1,800 | €1,800 | €1,800 | €1,800 | §33b VI EStG |
 
 ---
 
@@ -168,7 +169,8 @@
 - **Confidence**: ✅ Definitive
 
 ### 2.5 Kinderbetreuungskosten
-- **Amount**: 2/3 of costs, up to €4,000 per child per year (2/3 of max €6,000)
+- **2024**: 2/3 of costs, up to €4,000 per child per year
+- **2025+**: 80% of costs, up to €4,800 per child per year
 - **Age**: Child under 14 (or disabled child of any age)
 - **Legal basis**: §10 Abs. 1 Nr. 5 EStG
 - **Payment method**: Bank transfer required (no cash)
@@ -245,8 +247,11 @@
 ## 4. Family Deductions
 
 ### 4.1 Kindergeld vs. Kinderfreibetrag (Günstigerprüfung)
-- **Kindergeld**: €250/month per child (first two); €276/month child 3+  *(verify 2025 — planned increase)*
-- **Kinderfreibetrag total per child**: Sachbedarf (€3,192 × 2) + BEA (€1,464 × 2) = **€9,312 for couple**
+- **Kindergeld**: 2024 = €250/month, 2025 = €255/month, 2026 = €259/month per child
+- **Kinderfreibetrag total per child (couple)**:
+  - 2024: (€3,306 × 2) + (€1,464 × 2) = **€9,540**
+  - 2025: (€3,336 × 2) + (€1,464 × 2) = **€9,600**
+  - 2026: (€3,414 × 2) + (€1,464 × 2) = **€9,756**
 - **Günstigerprüfung**: Finanzamt automatically checks which is more favorable — you cannot choose
 - At **gross ~€40,000** (single), KFB typically doesn't beat Kindergeld
 - At **gross ~€70,000+** (single), KFB starts to win
@@ -325,4 +330,4 @@ Before filing each year, verify these have not changed:
 - [ ] Kindergeld amounts
 - [ ] Kinderfreibetrag amounts
 - [ ] Vorabpauschale Basiszins (January BMF publication)
-- [ ] Kleinunternehmergrenze (increased to €25,000 planned for 2025)
+- [ ] Kleinunternehmergrenze (effective €25,000 / €100,000 from 2025 onward)

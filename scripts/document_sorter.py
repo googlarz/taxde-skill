@@ -201,6 +201,14 @@ def extract_text(filepath: str) -> str:
 
     # PDF
     if ext == ".pdf":
+        try:
+            with open(filepath, "rb") as fh:
+                header = fh.read(5)
+            if header != b"%PDF-":
+                return path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+
         text = ""
         if HAS_PDFPLUMBER:
             try:
@@ -348,6 +356,7 @@ def build_new_name(
     """Build a standardised filename."""
     config = DOCUMENT_CATEGORIES[cat]
     pattern = config["rename_pattern"]
+    ext = Path(original_name).suffix.lower() or ".pdf"
 
     amount_str = f"{int(amount)}" if amount else "0"
     month_str = month or "00"
@@ -366,11 +375,13 @@ def build_new_name(
         year_assessed=year,
         original_name=Path(original_name).stem,
     )
+    if name.endswith(".pdf"):
+        name = name[:-4] + ext
     # Sanitize
     name = re.sub(r'[<>:"/\\|?*]', '_', name)
     name = re.sub(r'_+', '_', name)
-    if not name.endswith(".pdf"):
-        name = Path(original_name).stem + "_sorted.pdf"
+    if not name.endswith(ext):
+        name = Path(original_name).stem + "_sorted" + ext
     return name
 
 

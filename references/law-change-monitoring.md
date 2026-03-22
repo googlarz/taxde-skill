@@ -183,15 +183,24 @@ These items change almost every year — monitor each January:
 - Sparer-Pauschbetrag doubled to €1,000/€2,000 (from €801/€1,602)
 
 ### 2024 changes
-- Grundfreibetrag: €11,604 (from €10,908)
+- Grundfreibetrag: €11,784 (from €10,908)
 - Progressionsstufen adjusted upward
-- Kindergeld: €250/month from third child €276 (unchanged from 2023)
+- Kindergeld: €250/month per child
+- Kinderfreibetrag: €9,540 per child
+- Arbeitnehmer-Pauschbetrag remains €1,230
 
-### 2025 planned / legislated (verify before citing)
-- Grundfreibetrag: planned €12,096
-- Kleinunternehmergrenze: planned increase to €25,000/€100,000
-- BBG RV: €96,600 (as announced)
-- Kindergeld: possible increase (verify)
+### 2025 legislated changes
+- Grundfreibetrag: €12,096
+- Kleinunternehmergrenze: €25,000 / €100,000
+- BBG RV: €96,600
+- Kindergeld: €255/month per child
+- Kinderbetreuungskosten: 80% / max €4,800 per child
+
+### 2026 legislated changes
+- Grundfreibetrag: €12,348
+- Kindergeld: €259/month per child
+- Kinderfreibetrag: €9,756 per child
+- Soli-Freigrenze: ~€20,350 single / ~€40,700 together
 
 ---
 

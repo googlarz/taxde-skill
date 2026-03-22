@@ -39,8 +39,8 @@ Filing deadline: Within 1 month of starting self-employment (no hard penalty but
 **Critical decisions in the Fragebogen**:
 
 1. **Kleinunternehmerregelung**: §19 UStG — claim exemption from VAT
-   - Expected revenue this year: <€50,000 (threshold for current year)
-   - Revenue last year (or startup year): <€22,000 (or <€25,000 from 2025)
+   - Expected revenue this year: <€100,000 (threshold for current year)
+   - Revenue last year (or startup year): <€25,000
    - **See Section 3 for decision guide**
 
 2. **Buchführungspflicht**: Select EÜR (Einnahmenüberschussrechnung) unless revenue >€600,000 or profit >€60,000 (threshold for mandatory Bilanzierung — rarely applicable to freelancers)
@@ -57,8 +57,8 @@ Filing deadline: Within 1 month of starting self-employment (no hard penalty but
 ## 3. Kleinunternehmerregelung (§19 UStG) — Decision Guide
 
 ### Qualify if:
-- Revenue in previous year ≤ €22,000 (planned: ≤€25,000 from 2025)
-- Expected revenue in current year ≤ €50,000 (planned: ≤€100,000 from 2025)
+- Revenue in previous year ≤ €25,000
+- Expected revenue in current year ≤ €100,000
 
 ### Should you opt in?
 
@@ -71,7 +71,7 @@ Filing deadline: Within 1 month of starting self-employment (no hard penalty but
 **Opt OUT (regular VAT) if**:
 - Your clients are primarily businesses (B2B) with full VAT recovery — they don't care about your 19%
 - You have significant business purchases with input tax (office equipment, software, travel)
-- You expect to grow past €22,000 quickly — forced switch mid-year is administratively painful
+- You expect to grow past €25,000 quickly — forced switch mid-year is administratively painful
 - You invoice internationally (B2B EU invoices are 0% VAT regardless)
 
 **Break-even calculation**:
