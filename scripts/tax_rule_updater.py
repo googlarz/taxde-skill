@@ -72,6 +72,8 @@ class DetectedChange:
     source_label: str
     source_url: str
     derived_from: str
+    change_type: str
+    severity: str
 
 
 SOURCE_SPECS = (
@@ -266,6 +268,35 @@ def flatten_snapshot_values(snapshot: dict) -> dict[str, object]:
     return values
 
 
+def build_normalized_snapshot_entries(snapshot: dict) -> list[dict]:
+    entries = []
+    for source_id, source in snapshot.items():
+        for key, payload in source["extracted"].items():
+            parts = key.split(".")
+            if parts[0] == "tax_rules":
+                year = int(parts[1])
+                field = parts[2]
+                family = "tax_rules"
+            else:
+                year = int(parts[2])
+                field = parts[1]
+                family = "tax_dates"
+            entries.append(
+                {
+                    "key": key,
+                    "family": family,
+                    "year": year,
+                    "field": field,
+                    "value": payload["value"],
+                    "value_type": payload["value_type"],
+                    "source_id": source_id,
+                    "source_title": source["label"],
+                    "source_url": source["url"],
+                }
+            )
+    return sorted(entries, key=lambda item: item["key"])
+
+
 def derive_proposed_updates(
     snapshot_values: dict[str, object],
     source_lookup: dict[str, dict],
@@ -323,6 +354,7 @@ def detect_changes(proposed: dict, derived_lookup: dict[str, dict]) -> list[Dete
             if current_value != proposed_value:
                 key = f"tax_rules.{year}.{field}"
                 source = derived_lookup[key]
+                change_type, severity = classify_change_key(key)
                 changes.append(
                     DetectedChange(
                         key=key,
@@ -332,6 +364,8 @@ def detect_changes(proposed: dict, derived_lookup: dict[str, dict]) -> list[Dete
                         source_label=source["source_label"],
                         source_url=source["source_url"],
                         derived_from=source["derived_from"],
+                        change_type=change_type,
+                        severity=severity,
                     )
                 )
 
@@ -342,6 +376,7 @@ def detect_changes(proposed: dict, derived_lookup: dict[str, dict]) -> list[Dete
             if current_value != proposed_value:
                 key = f"tax_dates.{ 'agriculture' if agriculture else 'standard' }.{year}"
                 source = derived_lookup[key]
+                change_type, severity = classify_change_key(key)
                 changes.append(
                     DetectedChange(
                         key=key,
@@ -351,10 +386,24 @@ def detect_changes(proposed: dict, derived_lookup: dict[str, dict]) -> list[Dete
                         source_label=source["source_label"],
                         source_url=source["source_url"],
                         derived_from=source["derived_from"],
+                        change_type=change_type,
+                        severity=severity,
                     )
                 )
 
     return sorted(changes, key=lambda item: item.key)
+
+
+def classify_change_key(key: str) -> tuple[str, str]:
+    if key.startswith("tax_dates."):
+        return "deadline", "high"
+    if any(token in key for token in ("grundfreibetrag", "zone", "spitzen", "reichen", "soli")):
+        return "tariff_parameter", "high"
+    if any(token in key for token in ("kindergeld", "kinderfreibetrag", "kinderbetreuung")):
+        return "family_threshold", "medium"
+    if any(token in key for token in ("riester", "ruerup", "bav")):
+        return "contribution_limit", "medium"
+    return "threshold", "low"
 
 
 def format_python_scalar(value: object) -> str:
@@ -640,9 +689,14 @@ def write_proposal_bundle(
         json.dumps(snapshot, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    (bundle_dir / "changes.json").write_text(
+        json.dumps([serialize_change(change) for change in changes], indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     proposal_patch = create_unified_diff(repo_root, updated_root, changed_files)
     (bundle_dir / "proposal.patch").write_text(proposal_patch, encoding="utf-8")
+    (bundle_dir / "release_notes.md").write_text(build_release_notes(changes), encoding="utf-8")
 
     for relative_path in changed_files:
         destination = candidate_dir / relative_path
@@ -666,7 +720,10 @@ def write_proposal_bundle(
         for change in changes:
             report_lines.extend(
                 [
-                    f"- `{change.key}`: `{change.current_value}` -> `{change.proposed_value}`",
+                    (
+                        f"- `{change.key}`: `{change.current_value}` -> `{change.proposed_value}` "
+                        f"({change.severity}/{change.change_type})"
+                    ),
                     f"  Source: {change.source_label}",
                     f"  URL: {change.source_url}",
                     f"  Derived from: `{change.derived_from}`",
@@ -687,7 +744,12 @@ def write_proposal_bundle(
             "",
             "1. Review `proposal.patch` and `candidate/`.",
             "2. Inspect `source_snapshot.json` and confirm the official-source matches.",
-            "3. If acceptable, apply with:",
+            "3. Review `release_notes.md` and `changes.json` for impact and scope.",
+            "4. Approve the bundle explicitly:",
+            "",
+            f"```bash\npython3 scripts/tax_rule_updater.py approve --proposal-dir {bundle_dir} --reviewer <name>\n```",
+            "",
+            "5. After approval, apply with:",
             "",
             f"```bash\npython3 scripts/tax_rule_updater.py apply --proposal-dir {bundle_dir}\n```",
         ]
@@ -703,6 +765,23 @@ def write_proposal_bundle(
             verification_output.append(result["stderr"])
         verification_output.append("\n")
     (bundle_dir / "verification.log").write_text("".join(verification_output), encoding="utf-8")
+    (bundle_dir / "proposal_manifest.json").write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "changed_files": changed_files,
+                "detected_change_count": len(changes),
+                "verification_passed": all(result["returncode"] == 0 for result in verification_results),
+                "severity_summary": {
+                    severity: sum(change.severity == severity for change in changes)
+                    for severity in ("high", "medium", "low")
+                },
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
     return bundle_dir
 
@@ -713,6 +792,47 @@ def serialize_value(value: object) -> str:
     return str(value)
 
 
+def serialize_change(change: DetectedChange) -> dict:
+    return {
+        "key": change.key,
+        "current_value": serialize_value(change.current_value),
+        "proposed_value": serialize_value(change.proposed_value),
+        "source_id": change.source_id,
+        "source_label": change.source_label,
+        "source_url": change.source_url,
+        "derived_from": change.derived_from,
+        "change_type": change.change_type,
+        "severity": change.severity,
+    }
+
+
+def build_release_notes(changes: list[DetectedChange]) -> str:
+    lines = [
+        "# TaxDE update release notes",
+        "",
+        "This proposal updates bundled tax rules from tracked official sources.",
+        "",
+    ]
+    if not changes:
+        lines.append("- No tracked rule changes detected.")
+        return "\n".join(lines) + "\n"
+
+    for severity in ("high", "medium", "low"):
+        grouped = [change for change in changes if change.severity == severity]
+        if not grouped:
+            continue
+        lines.append(f"## {severity.title()} impact changes")
+        lines.append("")
+        for change in grouped:
+            lines.append(
+                f"- `{change.key}` ({change.change_type}): "
+                f"`{serialize_value(change.current_value)}` -> `{serialize_value(change.proposed_value)}`"
+            )
+            lines.append(f"  Source: {change.source_label}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def print_change_summary(changes: list[DetectedChange]) -> None:
     if not changes:
         print("No tracked changes detected.")
@@ -720,7 +840,8 @@ def print_change_summary(changes: list[DetectedChange]) -> None:
     for change in changes:
         print(
             f"{change.key}: {serialize_value(change.current_value)} -> "
-            f"{serialize_value(change.proposed_value)}"
+            f"{serialize_value(change.proposed_value)} "
+            f"[{change.severity}/{change.change_type}]"
         )
         print(f"  Source: {change.source_label}")
         print(f"  URL: {change.source_url}")
@@ -769,8 +890,21 @@ def command_draft(args: argparse.Namespace) -> int:
 def command_apply(args: argparse.Namespace) -> int:
     proposal_dir = Path(args.proposal_dir).resolve()
     candidate_dir = proposal_dir / "candidate"
+    manifest_path = proposal_dir / "proposal_manifest.json"
+    approval_path = proposal_dir / "review_approval.json"
     if not candidate_dir.exists():
         raise FileNotFoundError(f"No candidate directory found at {candidate_dir}")
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"No proposal manifest found at {manifest_path}")
+    if not approval_path.exists():
+        raise PermissionError(
+            "Proposal has not been approved. Run "
+            "`python3 scripts/tax_rule_updater.py approve --proposal-dir ... --reviewer <name>` first."
+        )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not manifest.get("verification_passed"):
+        raise RuntimeError("Proposal verification did not pass. Fix the proposal before applying it.")
 
     applied = []
     for candidate in candidate_dir.rglob("*"):
@@ -786,6 +920,30 @@ def command_apply(args: argparse.Namespace) -> int:
     for relative_path in applied:
         print(f"- {relative_path}")
     print("Re-run verification before committing or merging.")
+    return 0
+
+
+def command_approve(args: argparse.Namespace) -> int:
+    proposal_dir = Path(args.proposal_dir).resolve()
+    manifest_path = proposal_dir / "proposal_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"No proposal manifest found at {manifest_path}")
+
+    approval_path = proposal_dir / "review_approval.json"
+    approval_path.write_text(
+        json.dumps(
+            {
+                "approved_at": datetime.now().isoformat(timespec="seconds"),
+                "reviewer": args.reviewer,
+                "notes": args.notes,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    print(f"Approved proposal bundle: {proposal_dir}")
+    print(f"Approval record: {approval_path}")
     return 0
 
 
@@ -805,6 +963,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Directory that will receive the proposal bundle.",
     )
     draft.set_defaults(func=command_draft)
+
+    approve_cmd = subparsers.add_parser("approve", help="Approve a reviewed proposal bundle.")
+    approve_cmd.add_argument(
+        "--proposal-dir",
+        required=True,
+        help="Existing proposal directory created by the draft command.",
+    )
+    approve_cmd.add_argument(
+        "--reviewer",
+        required=True,
+        help="Short reviewer name recorded in the approval file.",
+    )
+    approve_cmd.add_argument(
+        "--notes",
+        default="",
+        help="Optional reviewer notes.",
+    )
+    approve_cmd.set_defaults(func=command_approve)
 
     apply_cmd = subparsers.add_parser("apply", help="Apply a reviewed proposal bundle.")
     apply_cmd.add_argument(

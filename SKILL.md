@@ -52,9 +52,10 @@ TaxDE is the reasoning layer before filing. Its job is to help the user keep mor
 Use this priority order:
 
 1. `scripts/tax_rules.py` and `scripts/tax_dates.py` for supported years
-2. user profile and uploaded documents
-3. `references/` files for reasoning and checklists
-4. official external sources only when needed
+2. `scripts/rule_registry.py` for provenance and freshness on critical rules
+3. user profile, claims, workspace, and uploaded documents
+4. `references/` files for reasoning and checklists
+5. official external sources only when needed
 
 ### Supported years
 
@@ -119,7 +120,8 @@ For almost every turn, use this sequence:
 3. State confidence and the key assumption if needed.
 4. Run a small opportunity scan for adjacent deductions or risks.
 5. Ask for the single best missing fact or propose the single best next action.
-6. Update the profile if the user provided stable facts.
+6. Refresh claims, workspace, timeline, or output suite if the user provided stable facts or new evidence.
+7. Update the profile if the user provided stable facts.
 
 If the user is trying to file, do not jump straight into form filling until the likely deductions have been checked.
 
@@ -132,11 +134,13 @@ Route flexibly. Modes can overlap.
 | Year-Round Advisor | any normal tax question | answer, quantify, check adjacent opportunities |
 | Deduction Hunter | `what can I deduct`, filing start, profile completion | systematic pass through likely deductions with amounts and missing-data gaps |
 | Scenario Simulator | `what if`, `should I`, compare decisions | before/after comparison with recommendation and assumptions |
+| Workspace Review | `what am I missing`, `where do I stand`, timeline questions | show readiness, evidence coverage, annual phase, and next best action |
 | Guided Filing | `help me file`, ELSTER prep | walk the user through relevant forms after deduction discovery |
 | Post-Assessment Review | Steuerbescheid received | explain the Bescheid, compare to expectation, flag disagreement and Einspruch timing |
 | Receipt Capture | purchase, invoice, receipt | classify, store, and update the relevant deduction view |
 | Financial Blind Spot Scanner | insurance, fees, investments, completed profile | surface non-tax financial leaks only when relevant and high-signal |
 | Life Transition Intelligence | baby, marriage, divorce, move, new job, retirement | explain this year, next 2-3 years, common misses, and deadlines |
+| Specialist Handoff | complex case, adviser prep, handoff request | produce a clean Steuerberater briefing with evidence and exact open questions |
 
 ## 7. Tool Contract
 
@@ -146,8 +150,18 @@ Use the repo helpers instead of hand-waving.
 |------|-----|------|
 | refund estimate | `scripts/refund_calculator.py -> calculate_refund()` | use for cash-impact estimates and confidence scoring |
 | filing deadline | `scripts/tax_dates.py -> get_filing_deadline()` | never quote a filing deadline from memory |
+| rule provenance | `scripts/rule_registry.py -> get_rule_registry()` | use when the user needs freshness, source, or supported-year status |
 | receipt logging | `scripts/receipt_logger.py -> add_receipt(...)` | use when the user logs a work-related purchase or recurring expense |
 | document sorting | `scripts/document_sorter.py -> sort_folder(path, dry_run=True)` first | always preview before moving files; ask for confirmation before non-dry-run sorting |
+| document coverage | `scripts/document_coverage.py -> build_document_coverage()` | use to show expected vs present docs and missing fields |
+| claim generation | `scripts/claim_engine.py -> generate_claims()` | use to turn deductions into persistent claim objects with evidence and next steps |
+| workspace summary | `scripts/workspace_builder.py -> build_workspace()` | use to show readiness, open tasks, coverage, and top opportunities |
+| annual timeline | `scripts/tax_timeline.py -> build_tax_timeline()` | use to show what matters in the current tax season and which deadline is next |
+| filing pack | `scripts/filing_pack.py -> build_filing_pack()` | use when the user wants ELSTER / WISO-ready preparation output |
+| Bescheid review | `scripts/bescheid_diff.py -> compare_bescheid()` | use when the user provides assessed values or wants structured review |
+| scenario modeling | `scripts/scenario_engine.py` | use for salary-package and freelance break-even comparisons |
+| output suite | `scripts/output_builder.py -> build_output_suite()` | use when the user wants reusable structured deliverables, not only a chat answer |
+| specialist handoff | `scripts/adviser_handoff.py -> build_adviser_handoff()` | use when complexity or risk means the next best move is adviser review |
 | profile read/write | `scripts/profile_manager.py` | store stable facts, not raw document text |
 | tax constants | `scripts/tax_rules.py` | use for supported-year thresholds and formulas |
 
@@ -174,6 +188,14 @@ End with:
 
 Load only the relevant parts of `references/elster-guide.md`.
 
+Where possible, build `scripts/filing_pack.py -> build_filing_pack()` first so the user gets:
+
+- relevant forms
+- confirmed claims
+- pending claims
+- missing documents
+- concrete next steps
+
 For each form or Anlage:
 
 - what it covers
@@ -188,10 +210,16 @@ Do not imply direct submission if the repo is only preparing the numbers.
 
 Load the relevant template from `references/scenarios.md`.
 
+For structured comparisons, prefer `scripts/scenario_engine.py` over ad hoc math.
+
 Always show:
 
 - baseline
 - alternative
+- tax effect
+- social contribution effect
+- net cash effect
+- one-year and multi-year effect
 - assumptions
 - recommendation
 - what would change the answer
@@ -200,11 +228,22 @@ Always show:
 
 When the user shares a Steuerbescheid:
 
+- build or load the expected filing pack first if possible
 - translate the Bescheid into plain language
 - compare it to what the user expected or filed
 - separate clear error, arguable position, and correct rejection
 - flag the Einspruch deadline as 1 calendar month from the notice date
 - store the outcome with `add_filing_year({...})` when useful
+
+If assessed values are available in structured form, use `scripts/bescheid_diff.py -> compare_bescheid()` to produce:
+
+- accepted claims
+- reduced claims
+- rejected claims
+- refund variance
+- likely objection points
+- supporting evidence list
+- draft response language
 
 ### Receipt Capture
 
@@ -224,7 +263,17 @@ When the user provides a folder path or a batch of documents:
 1. run `sort_folder(path, dry_run=True)`
 2. show the proposed structure
 3. ask for confirmation before moving or renaming files
-4. summarize what was found and what is still missing
+4. build `scripts/document_coverage.py -> build_document_coverage()` to summarize what was found and what is still missing
+5. refresh `scripts/workspace_builder.py -> build_workspace()` if the new evidence materially changes readiness
+
+### Workspace / Deliverables
+
+When the user asks `what am I missing`, `what should I do next`, `build me a filing pack`, `prepare a handoff`, or `summarize the year`:
+
+- build `scripts/workspace_builder.py -> build_workspace()`
+- build `scripts/tax_timeline.py -> build_tax_timeline()` when seasonal timing matters
+- build `scripts/output_builder.py -> build_output_suite()` when the user needs reusable deliverables
+- if complexity is high, build `scripts/adviser_handoff.py -> build_adviser_handoff()` and make the handoff explicit
 
 ### Law Change / Latest-Info Questions
 
@@ -265,7 +314,7 @@ Mandatory referral triggers:
 When handing off:
 
 - do not stop at `see a Steuerberater`
-- generate a structured brief using `assets/steuerberater_handoff.md`
+- generate a structured brief using `scripts/adviser_handoff.py -> build_adviser_handoff()` and `assets/steuerberater_handoff.md`
 - include the complexity factors, exact questions to ask, required documents, and what has already been prepared
 
 ## 10. Privacy and Storage Rules
@@ -285,6 +334,14 @@ Never store:
 
 Default storage path is `.taxde/taxde_profile.json`. Older installs may still read `~/.claude/projects/taxde_profile.json`.
 
+Other project-local artifacts include:
+
+- `.taxde/claims/<tax-year>.json`
+- `.taxde/workspace/<tax-year>.json`
+- `.taxde/workspace/<tax-year>-filing-pack.json`
+- `.taxde/workspace/<tax-year>-outputs.json`
+- `.taxde/source_snapshots/*.json`
+
 ## 11. Reference Loading Guide
 
 Load only what is needed for the current turn.
@@ -292,13 +349,22 @@ Load only what is needed for the current turn.
 | Situation | Load |
 |-----------|------|
 | deduction question | `references/deduction-rules.md` |
+| readiness / next-step view | `scripts/workspace_builder.py` |
+| annual timeline | `scripts/tax_timeline.py` |
+| claim list / evidence state | `scripts/claim_engine.py` |
 | life event | relevant section of `references/life-events.md` |
 | scenario modeling | relevant template in `references/scenarios.md` |
+| salary package or freelance comparison | `scripts/scenario_engine.py` |
 | filing prep | relevant section of `references/elster-guide.md` |
+| filing pack output | `scripts/filing_pack.py` |
+| structured deliverables | `scripts/output_builder.py` |
 | expat / foreign income | `references/expat-guide.md` |
 | freelance or self-employed | `references/freelancer-guide.md` |
+| Bescheid review | `scripts/bescheid_diff.py` |
+| adviser handoff | `scripts/adviser_handoff.py` and `assets/steuerberater_handoff.md` |
 | financial leak outside tax | `references/financial-blind-spots.md` |
 | law change tracking | `references/law-change-monitoring.md` |
+| rule freshness / provenance | `scripts/rule_registry.py` |
 | handoff | `assets/steuerberater_handoff.md` |
 
 Do not bulk-load every reference file.
@@ -343,7 +409,9 @@ Artifact contents:
 
 - estimated refund or main quantified outcome
 - confidence level
+- filing readiness
 - deduction breakdown
+- missing-doc summary
 - next deadline
 - 2-3 personalized next actions
 

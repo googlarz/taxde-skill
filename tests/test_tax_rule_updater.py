@@ -9,6 +9,10 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from tax_rule_updater import (  # noqa: E402
+    DetectedChange,
+    build_normalized_snapshot_entries,
+    build_release_notes,
+    classify_change_key,
     clean_source_text,
     collect_snapshot,
     derive_proposed_updates,
@@ -69,6 +73,8 @@ class TaxRuleUpdaterTest(unittest.TestCase):
             derived_lookup["tax_rules.2026.kinderfreibetrag_child"]["derived_from"],
             "tax_rules.2026.kinderfreibetrag_total",
         )
+        normalized = build_normalized_snapshot_entries(snapshot)
+        self.assertTrue(any(entry["key"] == "tax_rules.2025.grundfreibetrag" for entry in normalized))
 
     def test_patch_tax_rules_text_updates_selected_values(self):
         original = """
@@ -167,6 +173,28 @@ ADVISED_DEADLINES = {
     def test_clean_source_text_strips_html_and_collapses_whitespace(self):
         cleaned = clean_source_text("<p>Hallo&nbsp;&nbsp;<strong>Welt</strong></p>")
         self.assertEqual(cleaned, "Hallo Welt")
+
+    def test_change_classification_and_release_notes(self):
+        self.assertEqual(classify_change_key("tax_dates.standard.2024"), ("deadline", "high"))
+        self.assertEqual(classify_change_key("tax_rules.2025.kindergeld_per_child"), ("family_threshold", "medium"))
+
+        notes = build_release_notes(
+            [
+                DetectedChange(
+                    key="tax_rules.2026.grundfreibetrag",
+                    current_value=12_096,
+                    proposed_value=12_348,
+                    source_id="bmf_changes_2026",
+                    source_label="BMF 2026 tax changes overview",
+                    source_url="https://example.com",
+                    derived_from="tax_rules.2026.grundfreibetrag",
+                    change_type="tariff_parameter",
+                    severity="high",
+                )
+            ]
+        )
+        self.assertIn("High impact changes", notes)
+        self.assertIn("tax_rules.2026.grundfreibetrag", notes)
 
 
 if __name__ == "__main__":
