@@ -8,10 +8,10 @@
 
 1. [What It Does](#what-it-does)
 2. [Quick Start](#quick-start)
-3. [How It Works](#how-it-works)
-4. [Data Storage Layout](#data-storage-layout)
-5. [Security & Privacy](#security--privacy)
-6. [German Locale](#german-locale)
+3. [Locales](#locales)
+4. [How It Works](#how-it-works)
+5. [Data Storage Layout](#data-storage-layout)
+6. [Security & Privacy](#security--privacy)
 7. [Bank Statement Import](#bank-statement-import)
 8. [Module Reference](#module-reference)
 9. [Example Conversations](#example-conversations)
@@ -51,7 +51,7 @@ Every session start checks five domains automatically:
 ## Quick Start
 
 ```bash
-git clone https://github.com/googlarz/finance-assistant-skill.git
+git clone --recurse-submodules https://github.com/googlarz/finance-assistant-skill.git
 cd finance-assistant-skill
 pip install -r requirements.txt
 ```
@@ -77,6 +77,18 @@ On first run, Finance Assistant:
 1. Automatically adds `.finance/` to your `.gitignore` (prevents accidental commits of financial data)
 2. Checks file permissions and warns if they're too open
 3. Starts a lightweight onboarding to collect your profile
+
+---
+
+## Locales
+
+Tax rules and social contribution logic live in locale plugins — country-specific modules that the skill loads dynamically.
+
+Locales are maintained in a separate git submodule at **https://github.com/googlarz/finance-assistant-locales**. The `--recurse-submodules` flag in the clone command above pulls them automatically.
+
+The **German locale (`de`)** is bundled with full 2024–2026 support, covering income tax, social contributions, deduction discovery, filing deadlines, and GKV/PKV thresholds.
+
+New locales can be contributed independently to the locales repository without touching the main skill code. See the [locales repo](https://github.com/googlarz/finance-assistant-locales) for the plugin interface, provenance format, and contribution guide.
 
 ---
 
@@ -117,7 +129,7 @@ def get_social_contributions(gross, year) -> dict
 def generate_tax_claims(profile, year) -> list[dict]
 ```
 
-The German locale is fully bundled. New locales can be scaffolded automatically via `locale_loader.py`.
+The German locale is fully bundled via the `locales/` submodule. New locales can be scaffolded automatically via `locale_loader.py`.
 
 ### Multi-Currency
 
@@ -279,44 +291,6 @@ The privacy statement is shown once:
 
 ---
 
-## German Locale
-
-The German locale (`locales/de/`) is fully bundled with support for tax years 2024, 2025, and 2026.
-
-### Supported Features
-
-| Feature | Module |
-|---------|--------|
-| Income tax (Einkommensteuer), Soli, Kirchensteuer | `tax_calculator.py` |
-| Social contributions (RV, KV, PV, AV) | `social_contributions.py` |
-| Deduction discovery (Werbungskosten, Sonderausgaben, ab. Belastungen) | `claim_rules.py` |
-| Filing deadlines (Abgabefrist, ELSTER) | `tax_dates.py` |
-| Tax rule provenance and freshness | `rule_updater.py` |
-| GKV/PKV insurance thresholds (Versicherungspflichtgrenze) | `insurance_rules.py` |
-
-### 2026 Parameters
-
-All 2026 parameters are filled (no `None` values). The Rürup ceiling (`ruerup_max_single: 30,784`) is estimated from the 2025 BBG progression (BBG 2026: €101,400 × 2025 ratio) and sourced in `provenance.json`.
-
-### Tax Classes
-
-All Steuerklassen (I–VI) are supported, including:
-- Married couples filing jointly (Ehegattensplitting)
-- Single parents (Alleinerziehendenentlastungsbetrag)
-- Dual-income couples (Steuerklasse III/V)
-
-### German-Specific References
-
-| File | Content |
-|------|---------|
-| `references/budgeting-strategies.md` | Berlin-specific tips: average rent, BVG Monatskarte, Rundfunkbeitrag |
-| `references/insurance-checklist.md` | GKV vs PKV decision, Haftpflicht, Berufsunfähigkeit, what NOT to buy |
-| `references/fire-planning.md` | FIRE with GKV minimum contributions, Vorabpauschale, Teilfreistellung |
-| `references/debt-strategies.md` | Schufa, Dispo rates, Schuldnerberatung |
-| `references/investment-basics.md` | VWCE, IWDA+EIMI, Freistellungsauftrag, Riester/Rürup |
-
----
-
 ## Bank Statement Import
 
 ### Supported Formats
@@ -350,8 +324,8 @@ All Steuerklassen (I–VI) are supported, including:
 | Module | Purpose |
 |--------|---------|
 | `skill.py` | Session entry: load profile, run security checks, surface alerts |
-| `finance_storage.py` | Path resolution, JSON persistence, `.taxde/` → `.finance/` migration |
-| `profile_manager.py` | v2 profile schema, deep-merge updates, TaxDE migration |
+| `finance_storage.py` | Path resolution and JSON persistence |
+| `profile_manager.py` | v2 profile schema, deep-merge updates |
 | `currency.py` | `Money` dataclass (Decimal), exchange rates with 24h cache |
 
 ### Accounts & Transactions
@@ -387,7 +361,7 @@ All Steuerklassen (I–VI) are supported, including:
 | `tax_engine.py` | Country-agnostic interface, delegates to locale plugin via `importlib` |
 | `locale_registry.py` | Rule provenance (source URL, verification date, confidence) |
 | `locale_loader.py` | Dynamic locale import, on-demand skeleton builder for new countries |
-| `locales/de/` | Full German locale (2024-2026, all parameters filled) |
+| `locales/de/` | Full German locale (2024-2026, all parameters filled) — via submodule (finance-assistant-locales) |
 
 ### Import
 
@@ -505,4 +479,3 @@ Key test files:
 | `test_workspace_builder.py` | 7-domain health score calculation |
 | `test_investment_tracker.py` | FIRE number, portfolio growth projection, snapshots |
 | `test_debt_optimizer.py` | Avalanche vs snowball, interest savings, debt-free date |
-
