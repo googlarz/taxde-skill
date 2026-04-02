@@ -1,5 +1,10 @@
 """
-Build a structured specialist handoff packet when TaxDE should stop cleanly.
+Finance Assistant Specialist Handoff.
+
+Build a structured brief for when the user needs professional advice
+(financial planner, tax adviser, insurance broker, lawyer).
+
+Adapted from TaxDE adviser_handoff.py with multi-domain support.
 """
 
 from __future__ import annotations
@@ -8,189 +13,148 @@ from datetime import datetime
 from typing import Optional
 
 try:
-    from claim_engine import generate_claims
-    from document_coverage import build_document_coverage
     from profile_manager import get_profile
+    from insight_engine import generate_insights
 except ImportError:
-    import os
-    import sys
-
+    import os, sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from claim_engine import generate_claims
-    from document_coverage import build_document_coverage
     from profile_manager import get_profile
+    from insight_engine import generate_insights
 
 
-def _risk_reasons(profile: dict, claims: list[dict], coverage: dict) -> list[dict]:
-    employment = profile.get("employment", {})
-    housing = profile.get("housing", {})
-    special = profile.get("special", {})
-    reasons = []
+REFERRAL_TRIGGERS = {
+    "tax_complex": {
+        "priority": "high",
+        "specialist": "Tax Adviser / Steuerberater",
+        "reason": "Complex tax situation requiring professional review.",
+    },
+    "cross_border": {
+        "priority": "high",
+        "specialist": "International Tax Adviser",
+        "reason": "Cross-border taxation likely affects the return.",
+    },
+    "estate_planning": {
+        "priority": "high",
+        "specialist": "Estate Planning Attorney",
+        "reason": "Estate or inheritance planning requires legal expertise.",
+    },
+    "insurance_dispute": {
+        "priority": "medium",
+        "specialist": "Insurance Broker / Ombudsman",
+        "reason": "Insurance claim dispute or complex coverage question.",
+    },
+    "investment_complex": {
+        "priority": "medium",
+        "specialist": "Certified Financial Planner",
+        "reason": "Complex investment structures or large portfolio decisions.",
+    },
+    "debt_crisis": {
+        "priority": "high",
+        "specialist": "Debt Counselor / Schuldnerberatung",
+        "reason": "Debt-to-income ratio suggests professional debt counseling.",
+    },
+    "business_restructuring": {
+        "priority": "high",
+        "specialist": "Business Tax Adviser",
+        "reason": "Business restructuring or major organizational changes.",
+    },
+}
 
-    if special.get("expat") or special.get("dba_relevant"):
-        reasons.append(
-            {
-                "id": "cross_border",
-                "priority": "high",
-                "reason": "Cross-border tax residence or treaty allocation likely affects the return.",
-            }
-        )
 
-    if employment.get("type") == "mixed":
-        reasons.append(
-            {
-                "id": "mixed_income",
-                "priority": "medium",
-                "reason": "Mixed employment and self-employed income usually needs tighter allocation work.",
-            }
-        )
+def _detect_triggers(profile: dict, insights: list[dict]) -> list[dict]:
+    """Detect situations requiring specialist referral."""
+    triggers = []
+    tax_extra = profile.get("tax_profile", {}).get("extra", {})
+    emp = profile.get("employment", {})
 
-    if employment.get("type") in {"gewerbe", "freelancer", "freiberufler"} and profile.get("special", {}).get("capital_income"):
-        reasons.append(
-            {
-                "id": "business_plus_investments",
-                "priority": "medium",
-                "reason": "Business income plus investment income may need a cleaner adviser review pack.",
-            }
-        )
+    # Cross-border
+    if tax_extra.get("expat") or tax_extra.get("dba_relevant"):
+        triggers.append(REFERRAL_TRIGGERS["cross_border"])
 
-    if housing.get("rental_property"):
-        reasons.append(
-            {
-                "id": "rental_property",
-                "priority": "high",
-                "reason": "Rental property deductions, depreciation, and allocation need specialist review.",
-            }
-        )
+    # Complex business
+    if emp.get("type") in ("self_employed", "mixed"):
+        triggers.append(REFERRAL_TRIGGERS["tax_complex"])
 
-    unresolved_high_value = [
-        claim for claim in claims
-        if claim.get("status") != "ready" and float(claim.get("estimated_refund_effect") or 0.0) >= 200
+    # High-impact unresolved insights
+    high_impact = [
+        i for i in insights
+        if i.get("status") != "ready" and (i.get("impact_amount") or 0) >= 500
     ]
-    if unresolved_high_value:
-        reasons.append(
-            {
-                "id": "material_uncertainty",
-                "priority": "medium",
-                "reason": "High-value claims are still estimated or blocked on evidence.",
-            }
-        )
+    if len(high_impact) >= 3:
+        triggers.append(REFERRAL_TRIGGERS["investment_complex"])
 
-    missing_docs = coverage.get("missing_count", 0)
-    if missing_docs >= 3:
-        reasons.append(
-            {
-                "id": "evidence_gaps",
-                "priority": "medium",
-                "reason": "Several core documents are still missing, so specialist time should focus on the right gaps.",
-            }
-        )
+    # Debt stress
+    try:
+        from debt_optimizer import get_debts
+        debts = get_debts()
+        total_debt = sum(float(d.get("balance", 0)) for d in debts)
+        gross = float(emp.get("annual_gross", 0))
+        if gross > 0 and total_debt / gross > 0.5:
+            triggers.append(REFERRAL_TRIGGERS["debt_crisis"])
+    except Exception:
+        pass
 
-    return reasons
+    return triggers
 
 
-def _questions_for_reasons(reasons: list[dict], tax_year: int) -> list[str]:
+def _questions_for_triggers(triggers: list[dict]) -> list[str]:
     questions = []
-    reason_ids = {reason["id"] for reason in reasons}
-
-    if "cross_border" in reason_ids:
-        questions.append(f"How should tax residence and treaty allocation be handled for {tax_year}?")
-        questions.append("Which foreign income items need German reporting, exemption, or credit treatment?")
-    if "mixed_income" in reason_ids:
-        questions.append("How should costs be allocated between employee and self-employed activity?")
-        questions.append("Do advance payments or EÜR presentation change the filing approach?")
-    if "business_plus_investments" in reason_ids:
-        questions.append("Are there special reporting or loss-offset limits for the business and investment mix?")
-    if "rental_property" in reason_ids:
-        questions.append("Which property costs are immediately deductible versus depreciated over time?")
-        questions.append("Which supporting documents should be prioritized for the rental schedule?")
-    if "material_uncertainty" in reason_ids:
-        questions.append("Which unresolved claims are worth defending versus dropping to save time?")
-    if "evidence_gaps" in reason_ids:
-        questions.append("Which missing documents are mission-critical before filing or objection work starts?")
-
+    specialist_types = {t.get("specialist", "") for t in triggers}
+    if "International Tax Adviser" in specialist_types:
+        questions.append("How should tax residence and treaty allocation be handled?")
+        questions.append("Which foreign income items need local reporting?")
+    if "Tax Adviser / Steuerberater" in specialist_types:
+        questions.append("Can you validate the filing preparation and identify material blind spots?")
+    if "Certified Financial Planner" in specialist_types:
+        questions.append("Given my portfolio and goals, what allocation changes do you recommend?")
+    if "Debt Counselor / Schuldnerberatung" in specialist_types:
+        questions.append("What is the best path to reduce my debt burden sustainably?")
     if not questions:
-        questions.append("Can you validate the prepared filing pack and identify any material blind spots?")
-
-    deduped = []
-    seen = set()
-    for question in questions:
-        if question in seen:
-            continue
-        seen.add(question)
-        deduped.append(question)
-    return deduped[:8]
+        questions.append("Can you review my financial situation and identify any material risks?")
+    return questions[:8]
 
 
 def build_adviser_handoff(
     profile: Optional[dict] = None,
-    claims: Optional[list[dict]] = None,
-    coverage: Optional[dict] = None,
-    workspace: Optional[dict] = None,
+    domain: Optional[str] = None,
 ) -> dict:
+    """Build a structured specialist handoff brief."""
     profile = profile or get_profile() or {}
-    tax_year = profile.get("meta", {}).get("tax_year", datetime.now().year)
-    claims = claims or generate_claims(profile=profile, persist=False)["claims"]
-    coverage = coverage or build_document_coverage(profile=profile)
-    workspace = workspace or {}
+    insights_payload = generate_insights(profile, persist=False)
+    all_insights = insights_payload.get("insights", [])
 
-    reasons = _risk_reasons(profile, claims, coverage)
+    # Filter by domain if specified
+    insights = all_insights if not domain else [i for i in all_insights if i.get("domain") == domain]
+
+    triggers = _detect_triggers(profile, insights)
     risk_level = "low"
-    if any(reason["priority"] == "high" for reason in reasons):
+    if any(t.get("priority") == "high" for t in triggers):
         risk_level = "high"
-    elif reasons:
+    elif triggers:
         risk_level = "medium"
 
-    claims_to_review = [
-        {
-            "id": claim["id"],
-            "title": claim["title"],
-            "status": claim["status"],
-            "estimated_refund_effect": claim.get("estimated_refund_effect"),
-            "evidence_missing": claim.get("evidence_missing", []),
-        }
-        for claim in claims
-        if claim.get("status") != "ready" or float(claim.get("estimated_refund_effect") or 0.0) >= 250
+    unresolved = [
+        {"id": i["id"], "domain": i["domain"], "title": i["title"],
+         "status": i["status"], "impact": i.get("impact_amount")}
+        for i in insights if i.get("status") != "ready"
     ][:10]
-
-    documents_ready = []
-    for document in coverage.get("documents", []):
-        documents_ready.extend(document.get("files_found", []))
-
-    evidence_package = {
-        "documents_ready": sorted(set(documents_ready)),
-        "documents_missing": [
-            document["document"]
-            for document in coverage.get("documents", [])
-            if document["status"] != "present"
-        ],
-        "claims_to_review": claims_to_review,
-    }
 
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "tax_year": tax_year,
-        "requires_specialist_review": bool(reasons),
+        "requires_specialist_review": bool(triggers),
         "risk_level": risk_level,
-        "reasons": reasons,
-        "questions_for_adviser": _questions_for_reasons(reasons, tax_year),
-        "evidence_package": evidence_package,
-        "handoff_summary": (
-            "Prepare a specialist review packet before filing or objecting."
-            if reasons
-            else "No specialist trigger detected, but this packet is ready if adviser review becomes useful."
-        ),
-        "workspace_snapshot": {
-            "readiness_pct": workspace.get("readiness_pct"),
-            "money_left_on_table_estimate": workspace.get("money_left_on_table_estimate"),
-            "open_tasks": workspace.get("open_tasks", [])[:5],
+        "triggers": triggers,
+        "questions_for_specialist": _questions_for_triggers(triggers),
+        "unresolved_items": unresolved,
+        "profile_summary": {
+            "employment": profile.get("employment", {}).get("type"),
+            "locale": profile.get("meta", {}).get("locale"),
+            "family": profile.get("family", {}).get("status"),
+            "housing": profile.get("housing", {}).get("type"),
         },
+        "handoff_summary": (
+            "Professional review recommended — see triggers and questions above."
+            if triggers else
+            "No specialist trigger detected, but this brief is available if needed."
+        ),
     }
-
-
-if __name__ == "__main__":
-    handoff = build_adviser_handoff()
-    print(
-        f"Adviser handoff for {handoff['tax_year']}: "
-        f"{'required' if handoff['requires_specialist_review'] else 'not required'}"
-    )
