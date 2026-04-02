@@ -12,7 +12,6 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
 
 from profile_manager import get_profile, display_profile
-from finance_storage import has_legacy_data
 
 
 def _setup_security_defaults() -> None:
@@ -37,13 +36,6 @@ def main() -> str:
     profile = get_profile()
 
     if not profile or not profile.get("meta", {}).get("created"):
-        if has_legacy_data():
-            return (
-                "I found an existing TaxDE profile and migrated it to the new Finance Assistant format. "
-                "Your tax data is preserved. I can now help with budgeting, investments, debt, insurance, "
-                "and net worth tracking in addition to taxes.\n\n"
-                + display_profile()
-            )
         return (
             "Welcome to Finance Assistant! I help with budgeting, savings goals, investments, "
             "debt optimization, taxes, insurance, and net worth tracking.\n\n"

@@ -16,7 +16,6 @@
 8. [Module Reference](#module-reference)
 9. [Example Conversations](#example-conversations)
 10. [Running Tests](#running-tests)
-11. [Origin](#origin)
 
 ---
 
@@ -78,8 +77,6 @@ On first run, Finance Assistant:
 1. Automatically adds `.finance/` to your `.gitignore` (prevents accidental commits of financial data)
 2. Checks file permissions and warns if they're too open
 3. Starts a lightweight onboarding to collect your profile
-
-If you're migrating from the original TaxDE skill, your existing profile is detected and migrated automatically — tax history preserved.
 
 ---
 
@@ -509,12 +506,3 @@ Key test files:
 | `test_investment_tracker.py` | FIRE number, portfolio growth projection, snapshots |
 | `test_debt_optimizer.py` | Avalanche vs snowball, interest savings, debt-free date |
 
----
-
-## Origin
-
-Finance Assistant was transformed from [TaxDE](https://github.com/googlarz/taxde-skill), a German tax assistant for Claude Code. All original TaxDE functionality is preserved in `locales/de/`.
-
-The transformation kept every proven TaxDE pattern (storage layer, profile deep-merge, claim/insight pipeline, scenario engine, document sorter) while expanding from single-country tax to full personal finance.
-
-TaxDE users are automatically migrated on first session — profile and tax history preserved.
