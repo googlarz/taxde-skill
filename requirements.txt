@@ -1,5 +1,13 @@
+# Security — encryption at rest
+cryptography
+
+# PDF and document processing
 pdfplumber
 pypdf
 Pillow
 pytesseract
 pdf2image
+
+# Bank statement import (optional — parsers fall back to regex without these)
+# mt940
+# ofxparse

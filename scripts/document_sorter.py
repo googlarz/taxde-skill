@@ -1,6 +1,6 @@
 """
-TaxDE Document Sorter
-Classifies, renames, and sorts tax documents from a messy folder.
+Finance Assistant Document Sorter
+Classifies, renames, and sorts financial documents from a messy folder.
 Supports PDF, images (JPG/PNG), and scanned documents (OCR fallback).
 """
 

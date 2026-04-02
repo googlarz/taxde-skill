@@ -1,305 +1,520 @@
-# TaxDE Skill
+# Finance Assistant Skill
 
-**German tax copilot for people who need more than a filing wizard.**
+> Personal finance copilot for Claude Code — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, and scenario modeling. Privacy-first: all data stays on your machine, encrypted at rest.
 
-TaxDE is a local Claude/Codex skill for German tax optimization, filing preparation, document triage, decision support, and post-filing review. It is built for the part normal tax apps rarely handle well: reasoning across your whole situation, showing the math, telling you what matters next, and now keeping that work in a project-local tax workspace.
+---
 
-If Taxfix-style tools are good at interview flows, TaxDE is good at everything around the flow:
+## Table of Contents
 
-- finding deductions you did not know to ask about
-- modeling decisions before you make them
-- telling you what documents are missing
-- tracking which claims are confirmed, estimated, or still blocked on evidence
-- building filing packs instead of leaving everything trapped in chat history
-- reviewing a Steuerbescheid after it arrives
-- preparing a clean handoff when a Steuerberater is the right move
+1. [What It Does](#what-it-does)
+2. [Quick Start](#quick-start)
+3. [How It Works](#how-it-works)
+4. [Data Storage Layout](#data-storage-layout)
+5. [Security & Privacy](#security--privacy)
+6. [German Locale](#german-locale)
+7. [Bank Statement Import](#bank-statement-import)
+8. [Module Reference](#module-reference)
+9. [Example Conversations](#example-conversations)
+10. [Running Tests](#running-tests)
+11. [Origin](#origin)
 
-## Installation
+---
 
-### 1. Clone the repo
+## What It Does
 
-```bash
-git clone https://github.com/googlarz/taxde-skill.git
-cd taxde-skill
-```
+Finance Assistant covers the full personal finance lifecycle across 11 operating modes:
 
-### 2. Install Python dependencies
+| Mode | What you say | What you get |
+|------|-------------|-------------|
+| **Budget Manager** | "how am I doing on my budget?" | Variance by category, overspend alerts, pace warnings |
+| **Transaction Logger** | "I spent €42 at REWE" | Logged, auto-categorized, budget actuals updated |
+| **Savings Planner** | "I want to save €10k for a trip" | Timeline projection, monthly contribution needed |
+| **Investment Tracker** | "show my portfolio" | Allocation, total return, XIRR, rebalance suggestions |
+| **Debt Optimizer** | "best way to pay off my debts?" | Avalanche vs snowball comparison, debt-free date, interest saved |
+| **Tax Module** | "what can I deduct?" | Locale-specific deductions (German 2024-2026 bundled) |
+| **Insurance Reviewer** | "do I have enough coverage?" | Coverage gap analysis, renewal alerts |
+| **Net Worth Dashboard** | "where do I stand?" | Net worth with 7-domain health score and trend |
+| **Data Import** | "import this DKB CSV" | Parse → preview → categorize → deduplicate → import |
+| **Scenario Lab** | "should I rent or buy?" | Before/after comparison with multi-year projection |
+| **Specialist Handoff** | complex case | Structured brief for a Steuerberater or financial adviser |
 
-The core logic works on the standard library, but document extraction and OCR are better with the optional Python packages:
+### Proactive Session Alerts
 
-```bash
-python3 -m pip install -r requirements.txt
-```
+Every session start checks five domains automatically:
+- Budget overspend or pacing warnings ("85% of Groceries used at 16% of month")
+- Upcoming recurring payments in the next 7 days
+- Savings goal deadlines within 45 days
+- Tax filing deadlines within 45 days (German locale)
+- Monthly FIRE progress bar (`[████████░░░░░░░░░░░░] 42.3% — €317k / €750k`)
 
-### 3. Install optional system tools for OCR and scanned PDFs
-
-If you want image OCR and scanned-PDF extraction to work well, install:
-
-- `tesseract`
-- `poppler`
-
-Examples:
-
-```bash
-brew install tesseract poppler
-```
-
-or on Debian/Ubuntu:
-
-```bash
-sudo apt-get install tesseract-ocr poppler-utils
-```
-
-### 4. Load it as a local skill
-
-Symlink the repo into your local skill directory, for example:
-
-```bash
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
-ln -s "$PWD" "${CODEX_HOME:-$HOME/.codex}/skills/taxde"
-```
-
-If your setup uses a different skill path, load or symlink the repo there instead.
-
-## Why It Feels Different
-
-Most tax software helps only once you are already inside a filing flow.
-
-TaxDE is meant to help:
-
-- **before filing**: `Should I buy this laptop now or in January?`
-- **during filing**: `What belongs in Anlage N, and what is still missing?`
-- **after filing**: `Why did the Finanzamt reject this, and is an Einspruch worth it?`
-- **between tax years**: `What should I still do before December 31?`
-
-That makes it much more useful than a form-only app for people with real decisions, messy documents, or anything outside a vanilla employee case.
-
-## What TaxDE Can Support Today
-
-| Situation | What TaxDE does | Why people use it |
-|----------|------------------|-------------------|
-| Starting a return | runs a deduction hunt, estimates refund, flags missing inputs | better than waiting for a wizard to ask the right question |
-| Tax workspace | builds claims, readiness, evidence coverage, and next tasks for the active year | gives the user a persistent working state instead of a one-off chat answer |
-| Annual timeline | shows the current tax phase, next deadline, and seasonal actions | keeps the product useful all year instead of only at filing time |
-| Home office, commute, equipment | calculates the deduction logic and shows the formula | helps users understand what is deductible versus what only reduces taxable income |
-| Marriage, baby, side income, moving | models tax impact this year and next year | useful before life changes turn into tax surprises |
-| Salary package or freelance offer | compares net outcomes, benefits, and tax effect | decision support, not just filing support |
-| Messy tax folder | sorts documents, classifies likely categories, identifies gaps | saves time before filing even starts |
-| Filing prep pack | builds a form-oriented pack with claims, missing docs, and next steps | helps users move into ELSTER or WISO faster |
-| Steuerbescheid arrived | explains what changed and whether a challenge is worth exploring | post-filing value that filing apps usually stop short of |
-| Structured deliverables | builds yearly summaries, claim checklists, missing-doc checklists, and year-end action lists | turns chat into reusable work product |
-| Complex international or equity case | prepares a structured Steuerberater brief | saves paid adviser time instead of sending the user in blind |
-
-## What Builds Confidence
-
-TaxDE is designed to earn trust in boring, practical ways:
-
-- **Hard numbers come from code**: bundled rules live in [`scripts/tax_rules.py`](./scripts/tax_rules.py), not only in prompt text.
-- **Critical rules have provenance**: [`scripts/rule_registry.py`](./scripts/rule_registry.py) exposes source metadata, freshness state, and deadline provenance.
-- **Deadlines come from code**: filing dates live in [`scripts/tax_dates.py`](./scripts/tax_dates.py), not memory.
-- **Unsupported years are explicit**: the repo supports 2024, 2025, and 2026 and degrades honestly outside that range.
-- **Deductions are labeled correctly**: the skill distinguishes deductible amount, taxable-income reduction, and estimated cash refund.
-- **Equipment handling is conservative**: expensive work equipment is annualized when required instead of being fully expensed by mistake.
-- **Profile storage is local to the project**: no fake shared memory claims; structured data lives in `.taxde/taxde_profile.json`.
-- **Claims and readiness are persisted**: TaxDE writes project-local claims, filing packs, workspaces, and source snapshots under `.taxde/`.
-- **Seasonal guidance is built in**: TaxDE keeps an annual timeline so January, filing season, Bescheid season, and year-end work are treated differently.
-- **Structured outputs exist outside chat**: TaxDE can build a yearly summary, claim checklist, missing-document checklist, filing pack, Bescheid review pack, and adviser briefing.
-- **Updates are reviewable**: the repo includes a safe updater that checks official sources and drafts a patch instead of silently rewriting tax logic.
-- **Core paths are tested**: refund logic, deadlines, document sorting, and updater behavior all have regression tests.
-
-## How TaxDE Thinks
-
-The intended interaction model is simple:
-
-1. lead with the money, decision, or deadline impact
-2. show the math in plain language
-3. state what is confirmed versus estimated
-4. surface the next highest-value thing the user should do
-5. stop and hand off when the case becomes specialist territory
-
-Good output from TaxDE should feel like this:
-
-- `Homeoffice: 138 days x EUR 6 = EUR 828 deductible.`
-- `This is a deduction, not EUR 828 cash back. The refund effect depends on your tax rate.`
-- `Your 2025 filing is probably missing childcare evidence. That is the biggest remaining gap.`
+---
 
 ## Quick Start
 
-Start with prompts like these in German or English:
-
-```text
-Ich will meine Steuererklaerung fuer 2025 vorbereiten.
-Was kann ich fuer Homeoffice, Pendeln und meinen Laptop absetzen?
-Wir bekommen ein Baby. Was aendert sich steuerlich dieses Jahr und naechstes Jahr?
-Bitte erklaere mir meinen Steuerbescheid.
-Bitte sortiere meinen Steuerordner und sag mir, was fehlt.
-
-I want to prepare my 2025 German tax return.
-What can I deduct for working from home, commuting, and my laptop?
-We're having a baby. What changes tax-wise this year and next year?
-Please explain my German tax assessment notice.
-Please sort my tax documents and tell me what is missing.
+```bash
+git clone https://github.com/googlarz/finance-assistant-skill.git
+cd finance-assistant-skill
+pip install -r requirements.txt
 ```
 
-## Practical Prompts People Actually Use
+Add as a Claude Code skill in `~/.claude/settings.json`:
 
-These are the prompts that make TaxDE more compelling than a standard filing app.
+```json
+{
+  "skills": [
+    {
+      "name": "finance-assistant",
+      "path": "/path/to/finance-assistant-skill"
+    }
+  ]
+}
+```
 
-### Year-end money moves
+Then in Claude Code: `What's my financial health?`
 
-- `Should I buy my work laptop in December or January if I want the deduction in this tax year?`
-- `I already logged 160 home-office days. What should I still do before year-end to lower tax?`
+### First Session
 
-### Life events and household planning
+On first run, Finance Assistant:
+1. Automatically adds `.finance/` to your `.gitignore` (prevents accidental commits of financial data)
+2. Checks file permissions and warns if they're too open
+3. Starts a lightweight onboarding to collect your profile
 
-- `We're getting married in August. Should we change tax classes, and what changes this year versus next year?`
-- `We're expecting a baby. Model Kindergeld, childcare deductions, and whether a tax-class change could improve Elterngeld.`
+If you're migrating from the original TaxDE skill, your existing profile is detected and migrated automatically — tax history preserved.
 
-### Job and income decisions
+---
 
-- `Compare EUR 78k salary versus EUR 74k plus company car, Jobticket, and bAV. Which leaves me better off net?`
-- `If I switch from employment to freelance work, what day rate do I need to match my current net income?`
+## How It Works
 
-### Bescheid review
+### Profile-First Architecture
 
-- `Translate this Steuerbescheid into plain English and tell me whether an Einspruch is worth it.`
-- `The tax office rejected part of my home-office claim. What is the likely reason, and what evidence would help?`
+Every session starts by loading your stored profile with `profile_manager.py`. All scripts operate on this profile + the `.finance/` data directory. Nothing is hardcoded; everything adapts to your locale, currency, and situation.
 
-### Receipts and documents
+### Insight Pipeline
 
-- `I bought a monitor, desk, and headset. Log them and tell me what is immediately deductible versus annualized.`
-- `Sort this folder of tax documents and tell me what is missing before I start filing.`
+The insight engine (`insight_engine.py`) runs after every major data update. It dispatches to domain-specific generators:
 
-### Complex-case handoff
+```
+budget_insights → savings_insights → investment_insights
+→ debt_insights → insurance_insights → tax_insights → net_worth_insights
+```
 
-- `I have RSUs from a US employer and moved to Germany mid-year. Prepare a Steuerberater briefing with the questions I should ask.`
-- `I worked in Germany, Poland, and the UK in the same year. What can you prepare before I talk to a tax adviser?`
+Each insight carries a 4-level status:
+- `ready` — actionable right now
+- `needs_input` — needs one more fact from you
+- `needs_evidence` — needs a document or statement
+- `detected` — background risk found, FYI
 
-## Where It Is Strongest
+And a confidence label: `Definitive` | `Likely` | `Debatable` | `Avoid`
 
-TaxDE is strongest for:
+### Locale Plugin System
 
-- employees and common family cases
-- home office, commuting, work equipment, training, donations
-- childcare and pension contribution orientation
-- side income, freelancers, and mixed-income households
-- claim tracking, readiness scoring, and missing-document triage
-- filing pack generation for ELSTER / WISO preparation
-- Bescheid diffing against what was expected
-- salary package and freelance break-even scenarios
-- filing preparation and post-assessment review
-- life-event modeling across the next 1-3 years
+Tax rules are country-specific plugins in `locales/<country_code>/`. Each locale exports a standard interface:
 
-## Where It Is Deliberately Conservative
+```python
+LOCALE_CODE = "de"
+SUPPORTED_YEARS = [2024, 2025, 2026]
+def get_tax_rules(year) -> dict
+def calculate_tax(profile, year) -> dict
+def get_filing_deadlines(year) -> list[dict]
+def get_social_contributions(gross, year) -> dict
+def generate_tax_claims(profile, year) -> list[dict]
+```
 
-TaxDE will help orient and prepare, but it should not bluff in:
+The German locale is fully bundled. New locales can be scaffolded automatically via `locale_loader.py`.
 
-- years outside 2024-2026 without official verification
-- missing-data-heavy estimates
-- expat or cross-border questions before specialist review
-- complex equity compensation
-- US citizenship plus German residency
-- exit taxation
-- high-stakes GmbH structuring or reorganization work
+### Multi-Currency
 
-In those cases the right behavior is not `sorry, ask someone else`. The right behavior is `here is the exact brief, evidence, and question list to take to a Steuerberater`.
+All amounts use the `Money` class (backed by `Decimal`) to avoid floating-point errors. Exchange rates are cached in `.finance/exchange_rates.json` with a 24-hour TTL; fallback rates are clearly marked as lower confidence.
 
-## How It Stays Current
+---
 
-This repo does **not** auto-update itself blindly.
+## Data Storage Layout
 
-Instead, it uses a safer model:
+All data is project-local in `.finance/`. No cloud sync, no external APIs, no telemetry.
 
-- bundled rules for supported years
-- explicit official-source checks for `current`, `latest`, `today`, or unsupported years
-- a proposal-based updater in [`scripts/tax_rule_updater.py`](./scripts/tax_rule_updater.py)
+```
+.finance/
+├── finance_profile.json          # Core profile (employment, housing, goals, preferences)
+├── accounts/
+│   ├── accounts.json             # Account registry (no IBANs stored)
+│   └── transactions/
+│       └── <account>_<year>.json # Transaction log by account and year
+├── budgets/
+│   ├── 2025.json                 # Annual budget
+│   └── 2025-04.json             # Monthly budget with actuals
+├── goals/
+│   └── goals.json               # Savings goals with progress
+├── investments/
+│   ├── portfolio.json            # Holdings with current values
+│   └── snapshots/
+│       └── 2025-04-01.json      # Point-in-time portfolio snapshots
+├── debt/
+│   ├── debts.json               # Debt registry with rates and balances
+│   └── payoff_plans/
+│       └── <plan_id>.json       # Avalanche/snowball simulation results
+├── insurance/
+│   └── policies.json            # Insurance policies and renewal dates
+├── net_worth/
+│   └── snapshots/
+│       └── 2025-04-01.json      # Monthly net worth snapshots
+├── taxes/
+│   └── de/
+│       ├── 2024.json            # Tax year data
+│       └── 2024-claims.json     # Deduction claims for filing
+├── imports/
+│   └── import_log.json          # Import history for deduplication
+├── workspace/
+│   └── 2025.json                # Financial health dashboard
+├── exchange_rates.json           # Cached FX rates (24h TTL)
+└── audit/
+    └── access_log.json           # Audit trail of all data access
+```
 
-The updater can:
+**What is never stored:**
+- Bank login credentials, passwords, PINs, TANs
+- Full IBAN or bank account numbers
+- Credit card numbers or CVV codes
+- Tax IDs, passport numbers, national IDs
+- Raw document contents
 
-- fetch tracked official BMF sources
-- compare them to the bundled rules
-- patch a temporary repo copy
-- update matching tests and the reference table
-- run verification
-- write a review bundle with patch, source snapshot, change classifications, release notes, and candidate files
-- require explicit reviewer approval before apply
+---
 
-That means TaxDE can stay current without pretending an autonomous rule rewrite is safe.
+## Security & Privacy
 
-## Privacy and Storage
+### Design Principles
 
-TaxDE keeps its working state inside the active project's `.taxde/` directory.
+1. **Local-only**: All data lives in `.finance/` on your machine. No network calls for your personal data. No telemetry. No cloud sync.
+2. **Structured summaries, not raw data**: Transaction amounts and categories are stored, not raw bank statements or login sessions.
+3. **You own the delete button**: Every data category can be deleted individually or all at once.
+4. **Encryption at rest**: Fernet AES-128-CBC + HMAC-SHA256 — the same authenticated encryption scheme used in production web services.
+5. **Passphrase quality enforced**: The system rejects weak passphrases before encrypting (minimum 12 chars, character variety required), because a strong cipher with a weak key is still weak.
+6. **Atomic writes**: Encrypted files are written to a `.enc.tmp` file first, then atomically renamed — a power failure or crash cannot leave a half-encrypted, unreadable file.
+7. **File permissions**: `harden_permissions()` sets `.finance/` to `700` (owner-only directory) and all files to `600` (owner-only read/write). Other OS users on the same machine cannot read your data.
+8. **Git guard**: On first session, `.finance/` is automatically added to `.gitignore` so financial data cannot be accidentally committed and pushed to a repository.
+9. **Audit log**: Every significant data access (read, write, encrypt, export, delete) is logged to `audit/access_log.json` with a timestamp.
+10. **Sanitize before sharing**: `sanitize_for_sharing(data)` strips all PII (names, employers, payees, addresses) before you share data to get help — financial amounts and structures are preserved.
 
-Typical files now include:
+### Encryption Details
 
-- `.taxde/taxde_profile.json`
-- `.taxde/claims/<tax-year>.json`
-- `.taxde/workspace/<tax-year>.json`
-- `.taxde/workspace/<tax-year>-filing-pack.json`
-- `.taxde/workspace/<tax-year>-outputs.json`
-- `.taxde/source_snapshots/*.json`
+```
+Key derivation: PBKDF2-HMAC-SHA256
+Iterations:     480,000 (NIST 2023 recommendation)
+Salt:           16 bytes random per file (unique per encryption)
+Cipher:         AES-128 in CBC mode (via Fernet)
+MAC:            HMAC-SHA256 (Fernet built-in; prevents ciphertext tampering)
+Encoding:       Base64url
+Dependency:     pip install cryptography
+```
 
-Stored:
+Each file gets its own random salt. Two files encrypted with the same passphrase produce different ciphertexts — you cannot tell if two files contain the same data by comparing them.
 
-- tax profile facts
-- filing history
-- current-year receipts
-- claims and readiness state
-- filing-pack output
-- archived official-source snapshots
+The salt is stored alongside the ciphertext (standard practice — it only makes brute-force harder when combined with high iteration counts; it does not weaken the encryption).
 
-Not stored in the profile JSON:
+### Encrypted Export
 
-- raw document bodies
-- bank credentials
-- passwords
-- identity documents
+Backups can be encrypted before leaving your machine:
 
-Older installs may still read `~/.claude/projects/taxde_profile.json` as a legacy fallback.
+```python
+# Encrypted backup — safe to store in cloud or email to yourself
+export_all_data(passphrase="MyStr0ng!Passphrase")
 
-## Repository Map
+# Plaintext export — keep offline only
+export_all_data()
+```
 
-This repo combines prompt logic, deterministic helpers, references, and assets:
+The encrypted export uses the same Fernet key derivation as individual file encryption. The passphrase is never stored anywhere.
 
-- [`SKILL.md`](./SKILL.md): operating prompt for the skill
-- [`scripts/taxde_storage.py`](./scripts/taxde_storage.py): project-local storage for profile, claims, workspace, packs, and source snapshots
-- [`scripts/tax_rules.py`](./scripts/tax_rules.py): bundled year-specific rules
-- [`scripts/rule_registry.py`](./scripts/rule_registry.py): rule values plus provenance and freshness metadata
-- [`scripts/refund_calculator.py`](./scripts/refund_calculator.py): refund and confidence logic
-- [`scripts/tax_dates.py`](./scripts/tax_dates.py): filing deadlines
-- [`scripts/claim_engine.py`](./scripts/claim_engine.py): first-class claim generation and persistence
-- [`scripts/workspace_builder.py`](./scripts/workspace_builder.py): readiness, evidence coverage, and year workspace
-- [`scripts/tax_timeline.py`](./scripts/tax_timeline.py): annual tax timeline and seasonal action planner
-- [`scripts/document_coverage.py`](./scripts/document_coverage.py): expected-vs-present document tracking
-- [`scripts/filing_pack.py`](./scripts/filing_pack.py): ELSTER / WISO preparation pack output
-- [`scripts/bescheid_diff.py`](./scripts/bescheid_diff.py): expected-vs-assessed review helper
-- [`scripts/scenario_engine.py`](./scripts/scenario_engine.py): package comparison and freelance break-even analysis
-- [`scripts/adviser_handoff.py`](./scripts/adviser_handoff.py): specialist handoff trigger and briefing packet
-- [`scripts/output_builder.py`](./scripts/output_builder.py): yearly summary, checklist, review pack, and action-list output suite
-- [`scripts/receipt_logger.py`](./scripts/receipt_logger.py): structured receipt capture
-- [`scripts/document_sorter.py`](./scripts/document_sorter.py): folder sorting and document classification
-- [`scripts/profile_manager.py`](./scripts/profile_manager.py): project-scoped profile storage
-- [`scripts/tax_rule_updater.py`](./scripts/tax_rule_updater.py): safe update proposal pipeline
-- [`scripts/update_sources.py`](./scripts/update_sources.py): official-source snapshot archiving
-- [`references/`](./references): deduction, filing, life-event, scenario, and law-change guides
-- [`assets/`](./assets): dashboard template and handoff assets
-- [`tests/`](./tests): regression coverage for the core helpers
+### All Security Controls
 
-## Verification
+```python
+from scripts.data_safety import (
+    get_privacy_summary,          # Full security status report
+    get_data_inventory,           # Audit what's stored and where
+    harden_permissions,           # chmod 600/700 on all .finance/ files
+    check_permissions,            # Check for insecure file permissions
+    ensure_gitignore_protection,  # Add .finance/ to .gitignore
+    encrypt_sensitive_files,      # Encrypt profile, accounts, investments, debt
+    decrypt_sensitive_files,      # Decrypt for use
+    encrypt_file,                 # Encrypt a single file
+    decrypt_file,                 # Decrypt a single file
+    export_all_data,              # Export (plain or encrypted)
+    import_data,                  # Import from export file
+    delete_all_data,              # Permanent wipe (requires confirm=True)
+    delete_category,              # Delete one category (requires confirm=True)
+    sanitize_for_sharing,         # Strip PII before sharing for help
+    get_access_log,               # View audit trail
+)
+```
 
-Recommended verification before merging:
+### What Happens on First Session
+
+```
+skill.py (session start)
+  ├── ensure_gitignore_protection()   # .finance/ → .gitignore
+  ├── check_permissions()             # warn if group/world readable
+  └── get_profile()                   # load or start onboarding
+      └── (new user) show privacy statement
+```
+
+The privacy statement is shown once:
+
+> *Your data lives only in `.finance/` on your machine — nothing is ever uploaded. You can encrypt it, export it, or delete it completely at any time. I never store bank credentials, card numbers, IBANs, or government IDs.*
+
+### Threat Model
+
+| Threat | Protection |
+|--------|-----------|
+| Another user on same machine reads your files | `harden_permissions()` — chmod 600/700 |
+| Accidental `git push` of financial data | `ensure_gitignore_protection()` — automatic on session start |
+| Laptop stolen, unencrypted disk | `encrypt_sensitive_files(passphrase)` + OS disk encryption (FileVault/LUKS) |
+| Weak passphrase undermines AES | `_check_passphrase_strength()` — enforced before every encrypt call |
+| Power failure during encryption corrupts file | Atomic write via `.enc.tmp` → `rename()` — POSIX atomic |
+| Sharing data for help leaks names/employer | `sanitize_for_sharing()` — redacts all PII fields |
+| Unexpected data access by a process | `get_access_log()` — timestamped audit trail |
+| Cloud backup of export file exposes data | `export_all_data(passphrase=...)` — Fernet-encrypted export |
+
+### Known Limitations
+
+- **Memory**: Decrypted data resides in Python process memory while the skill is running. Python does not securely zero memory on deallocation. This is a fundamental Python limitation.
+- **OS keychain**: Passphrases are not stored in the OS keychain (macOS Keychain, GNOME Keyring). You must provide the passphrase each session when using encrypted files. This is deliberate — no stored secret means no stored secret to steal.
+- **Disk encryption**: If your disk is not encrypted (macOS FileVault, Linux LUKS), Fernet protects against OS-level access control bypass but not against forensic disk reads. Enable full-disk encryption for maximum protection.
+- **Audit log**: The access log itself is protected by `harden_permissions()` but is not encrypted by default (it contains timestamps and action types, not financial amounts).
+
+---
+
+## German Locale
+
+The German locale (`locales/de/`) is fully bundled with support for tax years 2024, 2025, and 2026.
+
+### Supported Features
+
+| Feature | Module |
+|---------|--------|
+| Income tax (Einkommensteuer), Soli, Kirchensteuer | `tax_calculator.py` |
+| Social contributions (RV, KV, PV, AV) | `social_contributions.py` |
+| Deduction discovery (Werbungskosten, Sonderausgaben, ab. Belastungen) | `claim_rules.py` |
+| Filing deadlines (Abgabefrist, ELSTER) | `tax_dates.py` |
+| Tax rule provenance and freshness | `rule_updater.py` |
+| GKV/PKV insurance thresholds (Versicherungspflichtgrenze) | `insurance_rules.py` |
+
+### 2026 Parameters
+
+All 2026 parameters are filled (no `None` values). The Rürup ceiling (`ruerup_max_single: 30,784`) is estimated from the 2025 BBG progression (BBG 2026: €101,400 × 2025 ratio) and sourced in `provenance.json`.
+
+### Tax Classes
+
+All Steuerklassen (I–VI) are supported, including:
+- Married couples filing jointly (Ehegattensplitting)
+- Single parents (Alleinerziehendenentlastungsbetrag)
+- Dual-income couples (Steuerklasse III/V)
+
+### German-Specific References
+
+| File | Content |
+|------|---------|
+| `references/budgeting-strategies.md` | Berlin-specific tips: average rent, BVG Monatskarte, Rundfunkbeitrag |
+| `references/insurance-checklist.md` | GKV vs PKV decision, Haftpflicht, Berufsunfähigkeit, what NOT to buy |
+| `references/fire-planning.md` | FIRE with GKV minimum contributions, Vorabpauschale, Teilfreistellung |
+| `references/debt-strategies.md` | Schufa, Dispo rates, Schuldnerberatung |
+| `references/investment-basics.md` | VWCE, IWDA+EIMI, Freistellungsauftrag, Riester/Rürup |
+
+---
+
+## Bank Statement Import
+
+### Supported Formats
+
+| Format | Banks / Sources |
+|--------|----------------|
+| CSV (auto-detected by header fingerprint) | DKB, ING-DiBa, Comdirect, N26, Wise (EUR), Revolut (EUR), generic fallback |
+| MT940 | Any German bank (SWIFT standard) |
+| OFX / QFX | Most German brokers, international banks |
+
+### Import Flow
+
+1. **Detect format** — header fingerprinting identifies the bank automatically
+2. **Parse** — extract date, amount, payee, description
+3. **Preview** — show first 10 transactions for review
+4. **Confirm** — user approves before any data is written
+5. **Auto-categorize** — keyword + payee rules assign categories
+6. **Deduplicate** — exact-match deduplication against existing transactions
+7. **Update** — account balance and budget actuals refreshed
+
+### Auto-Categorization
+
+`transaction_normalizer.py` maps transactions to 30 categories across 8 domains. `category_learner.py` remembers corrections and applies them to future imports from the same payee — the categorization improves over time.
+
+---
+
+## Module Reference
+
+### Core
+
+| Module | Purpose |
+|--------|---------|
+| `skill.py` | Session entry: load profile, run security checks, surface alerts |
+| `finance_storage.py` | Path resolution, JSON persistence, `.taxde/` → `.finance/` migration |
+| `profile_manager.py` | v2 profile schema, deep-merge updates, TaxDE migration |
+| `currency.py` | `Money` dataclass (Decimal), exchange rates with 24h cache |
+
+### Accounts & Transactions
+
+| Module | Purpose |
+|--------|---------|
+| `account_manager.py` | CRUD for checking/savings/investment/loan accounts |
+| `transaction_logger.py` | Log income/expense with auto-categorization (30 categories) |
+| `recurring_engine.py` | Auto-generate recurring transactions (rent, salary, subscriptions) |
+| `category_learner.py` | Learn from corrections to improve future auto-categorization |
+
+### Planning & Goals
+
+| Module | Purpose |
+|--------|---------|
+| `budget_engine.py` | Create budgets, 50/30/20 auto-distribution, variance analysis |
+| `goal_tracker.py` | Savings goals with completion projections |
+
+### Wealth
+
+| Module | Purpose |
+|--------|---------|
+| `investment_tracker.py` | Portfolio CRUD, allocation, FIRE number, monthly snapshots |
+| `investment_returns.py` | TWR, XIRR (Newton's method), per-holding performance |
+| `debt_optimizer.py` | Avalanche/snowball simulation, mortgage optimization, debt-free date |
+| `insurance_analyzer.py` | Policy tracking, coverage gaps, renewal alerts |
+| `net_worth_engine.py` | Aggregate assets + investments − liabilities, JSON snapshots |
+
+### Tax
+
+| Module | Purpose |
+|--------|---------|
+| `tax_engine.py` | Country-agnostic interface, delegates to locale plugin via `importlib` |
+| `locale_registry.py` | Rule provenance (source URL, verification date, confidence) |
+| `locale_loader.py` | Dynamic locale import, on-demand skeleton builder for new countries |
+| `locales/de/` | Full German locale (2024-2026, all parameters filled) |
+
+### Import
+
+| Module | Purpose |
+|--------|---------|
+| `import_router.py` | Format detection and routing |
+| `csv_importer.py` | DKB, ING-DiBa, Comdirect, N26, Wise, Revolut, generic |
+| `mt940_importer.py` | SWIFT MT940 with graceful fallback if library not installed |
+| `ofx_importer.py` | OFX/QFX with normalized date parsing |
+| `transaction_normalizer.py` | Auto-categorize, deduplicate, normalize amounts |
+
+### Intelligence & Output
+
+| Module | Purpose |
+|--------|---------|
+| `insight_engine.py` | Cross-domain insights, 4-status model, sorted by urgency |
+| `scenario_engine.py` | Salary comparison, FIRE projection, rent-vs-buy, debt-vs-invest, mortgage |
+| `workspace_builder.py` | 7-domain weighted health score |
+| `output_builder.py` | Structured deliverables assembled into an output suite |
+| `report_renderer.py` | Markdown and HTML reports |
+| `snapshot_scheduler.py` | Monthly auto-snapshots (portfolio and net worth) |
+| `session_alerts.py` | Proactive session nudges (budget, bills, deadlines, FIRE) |
+| `document_sorter.py` | Classify financial documents by type |
+| `adviser_handoff.py` | Structured referral brief for Steuerberater or adviser |
+
+### Security
+
+| Module | Purpose |
+|--------|---------|
+| `data_safety.py` | Fernet AES encryption, permissions hardening, git guard, export, delete, sanitize, audit |
+
+---
+
+## Example Conversations
+
+### Budget Check
+
+```
+You:  How am I doing on my April budget?
+FA:   €340 of €400 food budget used (85%) — 28 days into 30-day month. On pace.
+      Transport: €112 / €150 (75%) — fine.
+      Eating out: €89 / €80 — OVER by €9 ⚠
+
+      Suggestion: €11 left in eating out. One meal left this month.
+      Adjacent: Groceries has €60 remaining — cooking covers the gap.
+```
+
+### FIRE Calculation
+
+```
+You:  When can I retire if I invest €1,500/month?
+FA:   FIRE number: €900,000  (€36,000 expenses ÷ 4% withdrawal rate)
+      Current portfolio: €180,000
+      Monthly investment: €1,500 at 7% average return
+
+      Projected FIRE date: 2044 (18 years)
+      Formula: FV = PV×(1+r)^n + PMT×((1+r)^n−1)/r
+
+      Confidence: Likely (assumes 7% return; actual will vary)
+      What changes it: every extra €200/month cuts ~1 year.
+```
+
+### Debt Optimization
+
+```
+You:  Best strategy to pay off my 3 loans?
+FA:   Avalanche (highest rate first):
+        Credit card €3,200 @ 18.9% → Car loan €8,600 @ 5.9% → Ratenkredit €13,000 @ 3.4%
+        Interest saved vs minimum: €2,840 | Debt-free: Nov 2027
+
+      Snowball (smallest balance first):
+        Same order (happens to match) in this case
+        Interest saved vs minimum: €1,920 | Debt-free: Feb 2028
+
+      → Avalanche saves €920 more and finishes 3 months earlier.
+        Choose snowball only if you need the win of a quick first payoff.
+```
+
+### Tax Deductions (German)
+
+```
+You:  What can I deduct this year?
+FA:   Profile: angestellt, Berlin, homeoffice 3 days/week
+
+      ✓ Arbeitnehmer-Pauschbetrag: €1,230 (automatic)
+      ✓ Homeoffice: €6/day × 210 days = €1,260 (at cap)
+      ✓ Pendlerpauschale: €0 (homeoffice replaces commute)
+      ? Gewerkschaftsbeitrag: enter your amount
+      ? Fortbildungskosten: any training expenses this year?
+
+      Estimated refund above Pauschbetrag: ~€340
+      Confidence: Likely (exact figure needs actual receipts)
+```
+
+---
+
+## Running Tests
 
 ```bash
-python3 -m unittest discover -s tests -v
-python3 -m compileall scripts tests
-python3 scripts/refund_calculator.py
-python3 scripts/claim_engine.py
-python3 scripts/workspace_builder.py
-python3 scripts/tax_timeline.py
-python3 scripts/filing_pack.py
-python3 scripts/output_builder.py
-python3 scripts/adviser_handoff.py
-python3 scripts/receipt_logger.py
-python3 scripts/document_sorter.py
-python3 scripts/tax_rule_updater.py check
+python3 -m pytest tests/ -v
+# 154 tests — all modules, all scenarios
 ```
+
+Tests use an isolated `.finance/` directory per test via the `isolated_finance_dir` autouse fixture — they never touch real data.
+
+Key test files:
+
+| File | What it tests |
+|------|-------------|
+| `test_data_safety.py` | Encryption roundtrip, wrong passphrase, unique salts, permissions, git guard, encrypted export, sanitize |
+| `test_session_alerts.py` | Budget warnings, goal deadline alerts, urgency sorting |
+| `test_locale_de.py` | German tax calculation, 2026 parameters all non-null |
+| `test_import_system.py` | CSV/MT940/OFX parsing, bank detection, deduplication |
+| `test_scenario_engine.py` | FIRE, salary comparison, rent-vs-buy, debt-vs-invest |
+| `test_workspace_builder.py` | 7-domain health score calculation |
+| `test_investment_tracker.py` | FIRE number, portfolio growth projection, snapshots |
+| `test_debt_optimizer.py` | Avalanche vs snowball, interest savings, debt-free date |
+
+---
+
+## Origin
+
+Finance Assistant was transformed from [TaxDE](https://github.com/googlarz/taxde-skill), a German tax assistant for Claude Code. All original TaxDE functionality is preserved in `locales/de/`.
+
+The transformation kept every proven TaxDE pattern (storage layer, profile deep-merge, claim/insight pipeline, scenario engine, document sorter) while expanding from single-country tax to full personal finance.
+
+TaxDE users are automatically migrated on first session — profile and tax history preserved.

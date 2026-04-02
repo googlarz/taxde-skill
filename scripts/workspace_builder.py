@@ -1,5 +1,8 @@
 """
-Build a persistent tax-year workspace for TaxDE.
+Finance Assistant Workspace Builder.
+
+Builds a financial health dashboard aggregating data from all domains.
+Adapted from TaxDE workspace_builder.py.
 """
 
 from __future__ import annotations
@@ -8,144 +11,191 @@ from datetime import date, datetime
 from typing import Optional
 
 try:
-    from claim_engine import generate_claims
-    from document_coverage import build_document_coverage
-    from document_sorter import sort_folder
+    from finance_storage import get_workspace_path, save_json
     from profile_manager import get_profile
-    from refund_calculator import calculate_refund
-    from rule_registry import get_rule_registry
-    from tax_timeline import build_tax_timeline
-    from taxde_storage import get_claims_path, get_workspace_path, save_json
+    from insight_engine import generate_insights
 except ImportError:
-    import os
-    import sys
-
+    import os, sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from claim_engine import generate_claims
-    from document_coverage import build_document_coverage
-    from document_sorter import sort_folder
+    from finance_storage import get_workspace_path, save_json
     from profile_manager import get_profile
-    from refund_calculator import calculate_refund
-    from rule_registry import get_rule_registry
-    from tax_timeline import build_tax_timeline
-    from taxde_storage import get_claims_path, get_workspace_path, save_json
+    from insight_engine import generate_insights
 
 
-def _top_opportunities(claims: list[dict], limit: int = 5) -> list[dict]:
-    ranked = sorted(
-        claims,
-        key=lambda claim: (claim.get("estimated_refund_effect") or 0.0, claim.get("amount_deductible") or 0.0),
-        reverse=True,
-    )
-    return ranked[:limit]
-
-
-def _open_tasks(claims: list[dict], coverage: dict) -> list[str]:
-    tasks = []
-    for doc in coverage.get("documents", []):
-        if doc["status"] != "present":
-            tasks.append(f"Document: {doc['document']} ({doc['status']})")
-    for claim in claims:
-        if claim["status"] in {"needs_input", "needs_evidence", "detected"}:
-            tasks.append(f"{claim['title']}: {claim['next_action']}")
-    deduped = []
-    seen = set()
-    for task in tasks:
-        if task in seen:
-            continue
-        seen.add(task)
-        deduped.append(task)
-    return deduped[:10]
+def _safe_call(fn, *args, default=None, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        return default
 
 
 def build_workspace(
     profile: Optional[dict] = None,
-    folder_path: Optional[str] = None,
-    manifest: Optional[dict] = None,
-    today: Optional[date] = None,
     persist: bool = True,
 ) -> dict:
+    """Build a comprehensive financial health workspace."""
     profile = profile or get_profile() or {}
-    tax_year = profile.get("meta", {}).get("tax_year", datetime.now().year)
+    year = datetime.now().year
 
-    if folder_path and manifest is None:
-        manifest = sort_folder(folder_path, dry_run=True, profile=profile)
+    # Gather data from all domains
+    from net_worth_engine import calculate_net_worth
+    from budget_engine import get_budget, get_budget_variance
+    from goal_tracker import get_goals
+    from investment_tracker import calculate_total_return, calculate_allocation
+    from debt_optimizer import get_debts
+    from insurance_analyzer import calculate_total_premiums, analyze_coverage
+    from account_manager import get_total_balance
 
-    claims_payload = generate_claims(profile=profile, persist=persist)
-    claims = claims_payload["claims"]
-    coverage = build_document_coverage(profile=profile, manifest=manifest)
-    refund = calculate_refund(profile)
-    registry = get_rule_registry(tax_year)
+    nw = _safe_call(calculate_net_worth, default={"net_worth": 0, "total_assets": 0, "total_liabilities": 0})
+    month = datetime.now().month
+    budget = _safe_call(get_budget, year, month)
+    budget_variance = _safe_call(get_budget_variance, year, month) if budget else None
+    goals = _safe_call(get_goals, default=[])
+    portfolio_return = _safe_call(calculate_total_return, default={"total_return_pct": 0})
+    allocation = _safe_call(calculate_allocation, default={"total_value": 0})
+    debts = _safe_call(get_debts, default=[])
+    insurance = _safe_call(calculate_total_premiums, default={"total_annual": 0})
+    accounts = _safe_call(get_total_balance, default={"net": 0})
+    insights = _safe_call(generate_insights, profile, persist=False, default={"insights": []})
 
-    claim_weights = {"ready": 1.0, "needs_evidence": 0.55, "needs_input": 0.35, "detected": 0.25}
-    claim_score = (
-        sum(claim_weights.get(claim["status"], 0.0) for claim in claims) / (len(claims) or 1)
+    # ── Health Scores ────────────────────────────────────────────────────
+    budget_score = _budget_health(budget_variance)
+    savings_score = _savings_health(goals)
+    investment_score = _investment_health(portfolio_return, allocation)
+    debt_score = _debt_health(debts)
+    insurance_score = _insurance_health(profile)
+    nw_score = 0.7  # Base score, improves with trend data
+
+    readiness_pct = round(
+        (budget_score * 0.15 + savings_score * 0.15 + investment_score * 0.15 +
+         debt_score * 0.15 + insurance_score * 0.10 + nw_score * 0.15 + 0.15) * 100
     )
-    document_score = coverage.get("coverage_pct", 0) / 100
-    refund_score = refund.get("confidence_pct", 0) / 100
-    readiness_pct = round((claim_score * 0.35 + document_score * 0.40 + refund_score * 0.25) * 100)
+    readiness_pct = min(100, max(0, readiness_pct))
 
-    money_left_on_table = round(
-        sum((claim.get("estimated_refund_effect") or 0.0) for claim in claims if claim["status"] != "ready"),
-        2,
-    )
+    # ── Open tasks ───────────────────────────────────────────────────────
+    open_tasks = []
+    all_insights = insights.get("insights", []) if isinstance(insights, dict) else []
+    for i in all_insights:
+        if i.get("status") in ("needs_input", "needs_evidence", "detected"):
+            open_tasks.append(f"[{i['domain']}] {i['title']}: {i['next_action']}")
+    open_tasks = open_tasks[:10]
 
     workspace = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "tax_year": tax_year,
-        "readiness_pct": readiness_pct,
-        "evidence_coverage_pct": coverage.get("coverage_pct", 0),
-        "refund_confidence_pct": refund.get("confidence_pct", 0),
-        "money_left_on_table_estimate": money_left_on_table,
-        "estimated_refund": refund.get("estimated_refund"),
-        "top_opportunities": _top_opportunities(claims),
-        "open_tasks": _open_tasks(claims, coverage),
-        "claim_count": len(claims),
-        "claims_path": str(get_claims_path(tax_year)),
-        "recent_receipts": profile.get("current_year_receipts", [])[-5:],
-        "document_coverage": coverage,
-        "refund_summary": refund,
-        "rule_registry": {
-            "requested_year": registry["requested_year"],
-            "resolved_year": registry["resolved_year"],
-            "fallback_note": registry.get("fallback_note"),
-            "deadlines": registry.get("deadlines", {}),
+        "year": year,
+        "financial_health_pct": readiness_pct,
+        "net_worth": nw.get("net_worth", 0) if isinstance(nw, dict) else 0,
+        "total_assets": nw.get("total_assets", 0) if isinstance(nw, dict) else 0,
+        "total_liabilities": nw.get("total_liabilities", 0) if isinstance(nw, dict) else 0,
+        "scores": {
+            "budget": round(budget_score * 100),
+            "savings": round(savings_score * 100),
+            "investments": round(investment_score * 100),
+            "debt": round(debt_score * 100),
+            "insurance": round(insurance_score * 100),
         },
+        "budget_status": {
+            "has_budget": budget is not None,
+            "overspend_categories": budget_variance.get("overspend_categories", []) if budget_variance else [],
+        },
+        "goal_count": len(goals) if isinstance(goals, list) else 0,
+        "portfolio_value": allocation.get("total_value", 0) if isinstance(allocation, dict) else 0,
+        "portfolio_return_pct": portfolio_return.get("total_return_pct", 0) if isinstance(portfolio_return, dict) else 0,
+        "debt_count": len(debts) if isinstance(debts, list) else 0,
+        "debt_total": round(sum(float(d.get("balance", 0)) for d in debts), 2) if isinstance(debts, list) else 0,
+        "insurance_annual": insurance.get("total_annual", 0) if isinstance(insurance, dict) else 0,
+        "insight_count": len(all_insights),
+        "open_tasks": open_tasks,
+        "insights_summary": all_insights[:5],
     }
-    workspace["timeline"] = build_tax_timeline(
-        tax_year=tax_year,
-        workspace=workspace,
-        profile=profile,
-        today=today,
-    )
+
     if persist:
-        save_json(get_workspace_path(tax_year), workspace)
+        save_json(get_workspace_path(year), workspace)
+
     return workspace
+
+
+def _budget_health(variance) -> float:
+    if not variance or "error" in (variance or {}):
+        return 0.3
+    overspends = len(variance.get("overspend_categories", []))
+    if overspends == 0:
+        return 1.0
+    if overspends <= 2:
+        return 0.7
+    return 0.4
+
+
+def _savings_health(goals) -> float:
+    if not goals:
+        return 0.3
+    active = [g for g in goals if g.get("status") == "active"]
+    if not active:
+        return 0.5
+    funded = sum(1 for g in active if float(g.get("current_amount", 0)) > 0)
+    return min(1.0, 0.5 + funded / len(active) * 0.5)
+
+
+def _investment_health(returns, allocation) -> float:
+    if not allocation or float(allocation.get("total_value", 0)) == 0:
+        return 0.3
+    ret_pct = float(returns.get("total_return_pct", 0)) if returns else 0
+    if ret_pct > 5:
+        return 1.0
+    if ret_pct > 0:
+        return 0.7
+    return 0.5
+
+
+def _debt_health(debts) -> float:
+    if not debts:
+        return 1.0
+    high_rate = sum(1 for d in debts if float(d.get("interest_rate", 0)) > 10)
+    if high_rate > 0:
+        return 0.3
+    return 0.7
+
+
+def _insurance_health(profile) -> float:
+    try:
+        from insurance_analyzer import analyze_coverage
+        fam = profile.get("family", {})
+        coverage = analyze_coverage(
+            has_dependents=bool(fam.get("children")),
+            is_homeowner=profile.get("housing", {}).get("type") == "owner",
+        )
+        gaps = len(coverage.get("gaps", []))
+        if gaps == 0:
+            return 1.0
+        if gaps <= 2:
+            return 0.6
+        return 0.3
+    except Exception:
+        return 0.5
 
 
 def format_workspace_display(workspace: dict) -> str:
     lines = [
-        f"TaxDE workspace for {workspace['tax_year']}",
-        f"Readiness: {workspace['readiness_pct']}%",
-        f"Evidence coverage: {workspace['evidence_coverage_pct']}%",
-        f"Refund confidence: {workspace['refund_confidence_pct']}%",
-        f"Estimated refund: €{workspace['estimated_refund']:,.0f}",
-        f"Money left on table: €{workspace['money_left_on_table_estimate']:,.0f}",
-        "",
-        "Top opportunities:",
+        f"═══ Financial Health Dashboard ═══\n",
+        f"  Overall Health: {workspace['financial_health_pct']}%",
+        f"  Net Worth: EUR {workspace['net_worth']:,.0f}\n",
+        "  Domain Scores:",
     ]
-    for claim in workspace.get("top_opportunities", []):
-        lines.append(
-            f"- {claim['title']} [{claim['status']}] "
-            f"€{(claim.get('estimated_refund_effect') or 0):,.0f} impact"
-        )
-    if workspace.get("open_tasks"):
-        lines.append("")
-        lines.append("Open tasks:")
-        for task in workspace["open_tasks"]:
-            lines.append(f"- {task}")
+    scores = workspace.get("scores", {})
+    for domain, score in sorted(scores.items()):
+        bar = "█" * (score // 10) + "░" * (10 - score // 10)
+        lines.append(f"    {domain:<15} [{bar}] {score}%")
+
+    lines.append(f"\n  Portfolio: EUR {workspace.get('portfolio_value', 0):,.0f} "
+                 f"({workspace.get('portfolio_return_pct', 0):+.1f}%)")
+    lines.append(f"  Debts: EUR {workspace.get('debt_total', 0):,.0f} ({workspace.get('debt_count', 0)} active)")
+    lines.append(f"  Insurance: EUR {workspace.get('insurance_annual', 0):,.0f}/year")
+    lines.append(f"  Goals: {workspace.get('goal_count', 0)} active")
+
+    tasks = workspace.get("open_tasks", [])
+    if tasks:
+        lines.append(f"\n  Open Tasks ({len(tasks)}):")
+        for t in tasks[:5]:
+            lines.append(f"    → {t}")
+
     return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    print(format_workspace_display(build_workspace()))
