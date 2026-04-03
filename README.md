@@ -90,11 +90,9 @@ Open Cowork → Projects → **New Project**. Name it something like `Finance`.
 In the project's Instructions field, add:
 
 ```
-Always load and use the Finance Assistant skill from /path/to/finance-assistant-skill.
+Always load and use the Finance Assistant skill /finance-assistant-skill.
 Start every session by running skill.py to load my profile and surface any alerts.
 ```
-
-Replace `/path/to/finance-assistant-skill` with the actual path where you cloned the repo.
 
 **3. Grant folder access**
 Add two folders to the project's allowed paths:
