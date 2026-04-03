@@ -46,7 +46,12 @@ def calculate_tax_estimate(profile: Optional[dict] = None, year: Optional[int] =
 
     try:
         locale = _load_locale(locale_code)
-        result = locale.calculate_tax(profile, year)
+        try:
+            from locales.context import LocaleContext
+            ctx = LocaleContext.from_finance_profile(profile, tax_year=year)
+        except (ImportError, Exception):
+            ctx = profile  # fallback to dict for locales that handle it
+        result = locale.calculate_tax(ctx, year)
         result["locale"] = locale_code
         result["locale_name"] = getattr(locale, "LOCALE_NAME", locale_code.upper())
         return result
@@ -66,7 +71,12 @@ def generate_tax_claims(profile: Optional[dict] = None, year: Optional[int] = No
 
     try:
         locale = _load_locale(locale_code)
-        claims = locale.generate_tax_claims(profile, year)
+        try:
+            from locales.context import LocaleContext
+            ctx = LocaleContext.from_finance_profile(profile, tax_year=year)
+        except (ImportError, Exception):
+            ctx = profile  # fallback to dict for locales that handle it
+        claims = locale.generate_tax_claims(ctx, year)
         payload = {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "locale": locale_code,
@@ -107,8 +117,15 @@ def get_tax_rules(profile: Optional[dict] = None, year: Optional[int] = None) ->
         return {"error": f"Locale '{locale_code}' not available."}
 
 
+_available_locales_cache: list[dict] | None = None
+
+
 def get_available_locales() -> list[dict]:
     """List available locale plugins."""
+    global _available_locales_cache
+    if _available_locales_cache is not None:
+        return _available_locales_cache
+
     import os
     locales_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "locales")
     available = []
@@ -126,4 +143,5 @@ def get_available_locales() -> list[dict]:
                     })
                 except ImportError:
                     available.append({"code": entry, "name": entry.upper(), "years": [], "error": "import failed"})
+    _available_locales_cache = available
     return available

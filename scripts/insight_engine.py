@@ -10,8 +10,11 @@ Adapted from TaxDE claim_engine.py — preserves the same 4-status model
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Optional
+
+_log = logging.getLogger(__name__)
 
 try:
     from finance_storage import load_json, save_json, ensure_subdir
@@ -62,8 +65,8 @@ def _budget_insights(profile: dict) -> list[dict]:
                 "no_budget", "detected", None, "likely",
                 "Create a monthly budget to track spending."
             ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_budget_insights failed: %s", exc, exc_info=True)
     return insights
 
 
@@ -97,8 +100,8 @@ def _savings_insights(profile: dict) -> list[dict]:
                         proj.get("remaining"), "likely",
                         f"Increase monthly contribution or extend target date."
                     ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_savings_insights failed: %s", exc, exc_info=True)
     return insights
 
 
@@ -124,8 +127,8 @@ def _investment_insights(profile: dict) -> list[dict]:
                         "rebalance_needed", "ready", None, "likely",
                         f"{len(rebalance)} allocation adjustments suggested."
                     ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_investment_insights failed: %s", exc, exc_info=True)
     return insights
 
 
@@ -152,8 +155,8 @@ def _debt_insights(profile: dict) -> list[dict]:
                         float(d["balance"]) * float(d["interest_rate"]) / 100,
                         "definitive", "Prioritize paying this down or refinancing."
                     ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_debt_insights failed: %s", exc, exc_info=True)
     return insights
 
 
@@ -179,8 +182,8 @@ def _insurance_insights(profile: dict) -> list[dict]:
                 f"renewal_{r['policy']}", "ready", float(r.get("annual_premium", 0)),
                 "definitive", "Review and compare before auto-renewal."
             ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_insurance_insights failed: %s", exc, exc_info=True)
     return insights
 
 
@@ -198,8 +201,8 @@ def _tax_insights(profile: dict) -> list[dict]:
                     claim.get("confidence", "likely"),
                     claim.get("next_action", "")
                 ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_tax_insights failed: %s", exc, exc_info=True)
     return insights
 
 
@@ -220,8 +223,8 @@ def _net_worth_insights(profile: dict) -> list[dict]:
                 "nw_no_history", "detected", None, "likely",
                 "Take a net worth snapshot to start tracking."
             ))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("_net_worth_insights failed: %s", exc, exc_info=True)
     return insights
 
 

@@ -102,6 +102,16 @@ State the privacy line once:
 - `what do you know about me` -> `display_profile()` in plain language
 - `delete my finance profile` -> confirm, then `delete_profile()`
 
+### Help and discovery
+
+- `what can you do` / `help` → list all 11 modes with one-line descriptions
+- `show my finance profile` → full profile display
+- `financial health` / `dashboard` → 7-domain health score with recommendations
+- `what's new` / `what should I focus on` → session alerts + top insight
+- `import [file]` → route to CSV/MT940/OFX import flow
+- `set locale [code]` → switch tax locale (e.g. `set locale de`)
+- `privacy summary` → show data safety status
+
 ## 5. Core Turn Loop
 
 For almost every turn, use this sequence:

@@ -78,8 +78,16 @@ def get_exchange_rate(
     # Try cached EUR-based rates
     rates = cached.get("rates", {})
     if rates and from_currency in rates and to_currency in rates:
-        rate = rates[to_currency] / rates[from_currency]
-        return round(rate, 6), "cached"
+        if cached_at:
+            try:
+                age_hours = (datetime.now() - datetime.fromisoformat(cached_at)).total_seconds() / 3600
+                if age_hours <= 24:
+                    return round(rates[to_currency] / rates[from_currency], 6), "cached"
+            except (ValueError, TypeError):
+                pass
+        else:
+            return round(rates[to_currency] / rates[from_currency], 6), "cached"
+    # fall through to fallback if stale or no cached_at
 
     # Fallback to hardcoded rates
     if from_currency in _FALLBACK_RATES_EUR and to_currency in _FALLBACK_RATES_EUR:

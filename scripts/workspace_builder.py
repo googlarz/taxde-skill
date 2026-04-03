@@ -7,8 +7,11 @@ Adapted from TaxDE workspace_builder.py.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 from typing import Optional
+
+_log = logging.getLogger(__name__)
 
 try:
     from finance_storage import get_workspace_path, save_json
@@ -25,7 +28,8 @@ except ImportError:
 def _safe_call(fn, *args, default=None, **kwargs):
     try:
         return fn(*args, **kwargs)
-    except Exception:
+    except Exception as exc:
+        _log.debug("_safe_call(%s) failed: %s", getattr(fn, "__name__", fn), exc, exc_info=True)
         return default
 
 

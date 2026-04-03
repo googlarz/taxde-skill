@@ -62,12 +62,20 @@ def _budget_alerts(today: date) -> list[dict]:
     if not budget:
         return alerts
 
-    categories = budget.get("categories", {})
-    for cat, data in categories.items():
-        if not isinstance(data, dict):
-            continue
-        planned = data.get("planned", 0)
-        actual = data.get("actual", 0)
+    limits = budget.get("category_limits", {})
+    actuals_raw = budget.get("actuals", {})
+    # Also support legacy schema: {"categories": {"cat": {"planned": X, "actual": Y}}}
+    legacy_cats = budget.get("categories", {})
+    if legacy_cats and not limits:
+        for cat, data in legacy_cats.items():
+            if isinstance(data, dict):
+                limits[cat] = data.get("planned", 0)
+                actuals_raw[cat] = data.get("actual", 0)
+    all_cats = set(limits) | set(actuals_raw)
+    for cat in all_cats:
+        planned = limits.get(cat, 0)
+        actual_entry = actuals_raw.get(cat, 0)
+        actual = actual_entry.get("spent", 0) if isinstance(actual_entry, dict) else float(actual_entry or 0)
         if planned <= 0:
             continue
 
@@ -111,7 +119,7 @@ def _recurring_alerts(today: date) -> list[dict]:
 
     upcoming = get_upcoming(days=7)
     for item in upcoming:
-        due_str = item.get("next_due_date", "")
+        due_str = item.get("due_date", "")
         if not due_str:
             continue
         try:
@@ -200,44 +208,29 @@ def _goal_alerts(today: date) -> list[dict]:
 def _tax_alerts(today: date, locale: str = "de") -> list[dict]:
     alerts = []
     try:
-        if locale == "de":
-            from locales.de.tax_dates import get_filing_deadline
-        else:
-            return alerts
-    except ImportError:
-        return alerts
-
-    current_year = today.year
-    for tax_year in [current_year - 1, current_year]:
-        try:
-            deadline_info = get_filing_deadline(tax_year)
-            if not deadline_info:
-                continue
-            deadline_str = deadline_info.get("deadline", "")
-            if not deadline_str:
-                continue
-            deadline = date.fromisoformat(deadline_str[:10])
-            days_until = (deadline - today).days
-            if days_until < 0 or days_until > 45:
-                continue
-
-            label = deadline_info.get("label", f"{tax_year} tax return")
-            if days_until <= 7:
-                urgency = "critical"
-            elif days_until <= 21:
-                urgency = "warning"
-            else:
-                urgency = "info"
-
-            alerts.append(_alert(
-                urgency, "tax",
-                f"Tax deadline: {label}",
-                f"Due {deadline.strftime('%d %b %Y')} ({days_until} days)",
-                "File via ELSTER or a Steuerberater. Extension (Fristverlängerung) possible.",
-            ))
-        except Exception:
-            continue
-
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+        from tax_engine import get_tax_deadlines
+        for tax_year in [today.year - 1, today.year]:
+            deadlines = get_tax_deadlines(year=tax_year)
+            for d in deadlines:
+                deadline_str = d.get("deadline", "")
+                if not deadline_str:
+                    continue
+                try:
+                    deadline = date.fromisoformat(deadline_str[:10])
+                except ValueError:
+                    continue
+                days_until = (deadline - today).days
+                if days_until < 0 or days_until > 45:
+                    continue
+                label = d.get("label", f"{tax_year} tax deadline")
+                urgency = "critical" if days_until <= 7 else "warning" if days_until <= 21 else "info"
+                alerts.append(_alert(urgency, "tax", f"Tax deadline: {label}",
+                    f"Due {deadline.strftime('%d %b %Y')} ({days_until} days)",
+                    "File via ELSTER or a Steuerberater. Extension (Fristverlängerung) possible."))
+    except Exception:
+        pass
     return alerts
 
 
@@ -322,7 +315,7 @@ def format_alerts(alerts: list[dict]) -> str:
     if not alerts:
         return ""
 
-    icons = {"critical": "🔴", "warning": "🟡", "info": "🔵"}
+    icons = {"critical": "[!]", "warning": "[~]", "info": "[i]"}
     lines = ["**Session alerts:**"]
     for a in alerts:
         icon = icons.get(a["urgency"], "•")

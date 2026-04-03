@@ -41,10 +41,12 @@ def main() -> str:
             "debt optimization, taxes, insurance, and net worth tracking.\n\n"
             "Your data lives only in .finance/ on your machine — nothing is ever uploaded. "
             "You can encrypt it, export it, or delete it completely at any time.\n\n"
-            "Let's set up your financial profile. What's your primary currency and country?"
+            "To get started: what's your employment situation and roughly what do you earn? "
+            "I'm optimised for Germany (full tax rules for 2024-2026) but work for any country "
+            "for budgeting, investments, and debt — just with limited tax support outside Germany."
         )
 
-    profile_display = display_profile()
+    profile_display = display_profile(compact=True)
 
     # Surface proactive alerts after the profile summary
     try:

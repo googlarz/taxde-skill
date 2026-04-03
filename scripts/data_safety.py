@@ -188,7 +188,9 @@ def import_data(import_path: str) -> dict:
     imported = 0
 
     for rel_path, data in exported["data"].items():
-        target = finance_dir / rel_path
+        target = (finance_dir / rel_path).resolve()
+        if not str(target).startswith(str(finance_dir.resolve())):
+            continue  # skip paths that escape .finance/
         target.parent.mkdir(parents=True, exist_ok=True)
         save_json(target, data)
         imported += 1

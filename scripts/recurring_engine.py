@@ -190,8 +190,12 @@ def _calculate_due_dates(item: dict, after: date, up_to: date) -> list[date]:
     dates = []
 
     if freq == "monthly":
-        # Generate monthly dates
-        current = start
+        # Jump directly to the first month on or after `after` to avoid looping from epoch
+        from math import ceil
+        months_elapsed = (after.year - start.year) * 12 + (after.month - start.month)
+        months_elapsed = max(0, months_elapsed)
+        year_offset, month_offset = divmod(start.month - 1 + months_elapsed, 12)
+        current = start.replace(year=start.year + year_offset, month=month_offset + 1, day=1)
         while current <= up_to:
             try:
                 d = current.replace(day=min(day_of_month, 28))
@@ -206,7 +210,13 @@ def _calculate_due_dates(item: dict, after: date, up_to: date) -> list[date]:
                 current = current.replace(month=current.month + 1, day=1)
 
     elif freq == "quarterly":
-        current = start
+        # Jump to a quarter on or after `after`
+        from math import ceil
+        quarters_elapsed = ceil(((after.year - start.year) * 12 + (after.month - start.month)) / 3)
+        quarters_elapsed = max(0, quarters_elapsed)
+        month_offset = start.month - 1 + quarters_elapsed * 3
+        year_offset, month_rem = divmod(month_offset, 12)
+        current = start.replace(year=start.year + year_offset, month=month_rem + 1, day=1)
         while current <= up_to:
             try:
                 d = current.replace(day=min(day_of_month, 28))
@@ -228,7 +238,12 @@ def _calculate_due_dates(item: dict, after: date, up_to: date) -> list[date]:
 
     elif freq in FREQUENCIES:
         interval = FREQUENCIES[freq]
-        current = start
+        from math import ceil
+        if start < after:
+            intervals_to_skip = ceil((after - start).days / interval)
+            current = start + timedelta(days=intervals_to_skip * interval)
+        else:
+            current = start
         while current <= up_to:
             if current > after:
                 dates.append(current)

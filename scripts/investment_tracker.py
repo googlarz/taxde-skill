@@ -218,7 +218,9 @@ def project_portfolio_growth(
         projections.append({
             "year": year,
             "balance": round(balance, 2),
-            "total_contributed": round(current + total_contributed, 2),
+            "total_contributed": round(total_contributed, 2),
+            "initial_portfolio": round(current, 2),
+            "total_basis": round(current + total_contributed, 2),
             "total_growth": round(balance - current - total_contributed, 2),
         })
 

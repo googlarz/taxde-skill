@@ -291,17 +291,48 @@ def add_filing_year(filing_data: dict) -> dict:
 
 
 def delete_profile() -> bool:
-    path = get_profile_path()
-    if path.exists():
-        path.unlink()
-        return True
-    return False
+    try:
+        from finance_storage import get_finance_dir
+        from data_safety import delete_all_data, get_data_inventory
+        # Only consider it a real deletion if there is actual data present
+        inventory = get_data_inventory()
+        if inventory.get("status") == "no_data" or inventory.get("total_files", 0) == 0:
+            return False
+        result = delete_all_data(confirm=True)
+        return result.get("action") == "deleted"
+    except ImportError:
+        # fallback: just delete the profile file
+        path = get_profile_path()
+        if path.exists():
+            path.unlink()
+            return True
+        return False
 
 
-def display_profile() -> str:
+def display_profile(compact: bool = False) -> str:
     p = get_profile()
     if not p:
         return "No finance profile found. Start a conversation to create one."
+
+    if compact:
+        meta = p.get("meta", {})
+        emp = p.get("employment", {})
+        personal = p.get("personal", {})
+        currency = meta.get("primary_currency", "EUR")
+        locale = meta.get("locale", "—")
+        emp_type = emp.get("type", "")
+        gross = emp.get("annual_gross")
+        gross_str = f" €{gross/1000:.0f}k" if gross else ""
+        emp_summary = f"{emp_type}{gross_str}" if emp_type else ""
+        city = personal.get("city") or personal.get("region") or ""
+        last_updated = (meta.get("last_updated") or "—")[:10]
+        parts = [currency, locale]
+        if emp_summary:
+            parts.append(f"employed {emp_summary}" if emp_type == "employed" else emp_summary)
+        if city:
+            parts.append(city)
+        parts.append(f"Last updated: {last_updated}")
+        return " | ".join(parts)
 
     lines = ["═══ Your Finance Profile ═══\n"]
 
@@ -357,7 +388,6 @@ def display_profile() -> str:
     if pref_parts:
         lines.append(f"\nPreferences: {', '.join(pref_parts)}")
 
-    lines.append("\n[Say 'delete my finance profile' to wipe all stored data]")
     return "\n".join(lines)
 
 
