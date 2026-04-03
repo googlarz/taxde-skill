@@ -108,9 +108,53 @@ State the privacy line once:
 - `show my finance profile` → full profile display
 - `financial health` / `dashboard` → 7-domain health score with recommendations
 - `what's new` / `what should I focus on` → session alerts + top insight
-- `import [file]` → route to CSV/MT940/OFX import flow
+- `import [file]` → route to CSV/MT940/OFX/PDF import flow
 - `set locale [code]` → switch tax locale (e.g. `set locale de`)
 - `privacy summary` → show data safety status
+- `generate report` / `monthly report` → run `generate_report.py`, save `.md` and `.html` to `.finance/reports/`, open HTML in browser
+- `run daily brief` → call `cowork_tasks.daily_brief()` — session alerts + critical insights
+
+## 4a. Scheduled Tasks
+
+Finance Assistant includes three scheduled task functions in `scripts/cowork_tasks.py`
+designed for Cowork's task scheduler. Each function returns a clean formatted string
+and never crashes on missing data.
+
+### daily_brief()
+
+Run every morning. Surfaces:
+- All active session alerts (budget, recurring bills, goal deadlines, tax deadlines, FIRE)
+- Any critical ready insights from the insight engine
+
+Trigger phrase: `run daily brief`
+
+### weekly_summary()
+
+Run every Monday. Covers:
+- Budget pace for the current month (% elapsed vs % spent)
+- Categories currently over budget
+- Top 3 actionable insights across all domains
+- All bills due in the next 7 days
+
+Trigger phrase: `weekly summary` / `how is this week looking`
+
+### monthly_snapshot()
+
+Run on the last day of each month. Does:
+1. Takes a net worth snapshot (`net_worth_engine.take_snapshot()`)
+2. Takes a portfolio snapshot (`investment_tracker.take_portfolio_snapshot()`)
+3. Generates the HTML + Markdown monthly report (`generate_report.generate_monthly_report()`)
+4. Returns a summary with saved file paths
+
+Reports are saved to `.finance/reports/YYYY-MM.md` and `.finance/reports/YYYY-MM.html`.
+
+Trigger phrase: `monthly snapshot` / `end of month report`
+
+### Setting up in Cowork
+
+See `TASKS.md` in the repository root for plain-language task descriptions and
+recommended cron schedules. Each task is configured by pointing Cowork at the
+relevant function in `scripts/cowork_tasks.py`.
 
 ## 5. Core Turn Loop
 

@@ -31,9 +31,16 @@ def detect_format(file_path: str) -> str:
         return "mt940"
     if ext == ".csv":
         return "csv"
+    if ext == ".pdf":
+        return "pdf"
 
     # Content sniffing
     try:
+        with open(file_path, "rb") as f:
+            header_bytes = f.read(8)
+        if header_bytes.startswith(b"%PDF"):
+            return "pdf"
+        first_lines = header_bytes.decode("utf-8", errors="replace")
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             first_lines = f.read(2000)
         if "OFXHEADER" in first_lines or "<OFX>" in first_lines:
@@ -67,6 +74,9 @@ def import_file(
     elif fmt == "ofx":
         from ofx_importer import parse_ofx
         raw = parse_ofx(file_path)
+    elif fmt == "pdf":
+        from pdf_importer import parse_pdf
+        raw = parse_pdf(file_path, currency=currency)
     else:
         return {"error": f"Unknown format: {fmt}", "file": file_path}
 
