@@ -1,6 +1,6 @@
 # Finance Assistant Skill
 
-> Personal finance copilot for Claude Code — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, and scenario modeling. Privacy-first: all data stays on your machine, encrypted at rest.
+> Personal finance copilot for **Claude Code** and **Claude Cowork** — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, and scenario modeling. Privacy-first: all data stays on your machine, encrypted at rest.
 
 ---
 
@@ -50,13 +50,19 @@ Every session start checks five domains automatically:
 
 ## Quick Start
 
+### 1. Clone the skill
+
 ```bash
 git clone --recurse-submodules https://github.com/googlarz/finance-assistant-skill.git
 cd finance-assistant-skill
 pip install -r requirements.txt
 ```
 
-Add as a Claude Code skill in `~/.claude/settings.json`:
+---
+
+### Install in Claude Code
+
+Add as a skill in `~/.claude/settings.json`:
 
 ```json
 {
@@ -69,9 +75,42 @@ Add as a Claude Code skill in `~/.claude/settings.json`:
 }
 ```
 
-Then in Claude Code: `What's my financial health?`
+Then start a session: `What's my financial health?`
 
-### First Session
+---
+
+### Install in Claude Cowork
+
+Cowork gives you the same agent capabilities as Claude Code in a desktop-friendly interface. For the best experience, set it up as a dedicated project:
+
+**1. Create a new project**
+Open Cowork → Projects → **New Project**. Name it something like `Finance`.
+
+**2. Add a project instruction**
+In the project's Instructions field, add:
+
+```
+Always load and use the Finance Assistant skill from /path/to/finance-assistant-skill.
+Start every session by running skill.py to load my profile and surface any alerts.
+```
+
+Replace `/path/to/finance-assistant-skill` with the actual path where you cloned the repo.
+
+**3. Grant folder access**
+Add two folders to the project's allowed paths:
+- `/path/to/finance-assistant-skill` — the skill itself (scripts, locales, SKILL.md)
+- The folder where you want `.finance/` to live (e.g. your home directory `~`)
+
+**4. Start the project**
+Open the Finance project and say: `What's my financial health?`
+
+Claude will load your profile, surface any session alerts (budget warnings, upcoming bills, tax deadlines), and be ready for any finance question.
+
+> **Tip:** Pin the Finance project to your Cowork sidebar so it's one click away at the start of each day.
+
+---
+
+### First Session (both Claude Code and Cowork)
 
 On first run, Finance Assistant:
 1. Automatically adds `.finance/` to your `.gitignore` (prevents accidental commits of financial data)
