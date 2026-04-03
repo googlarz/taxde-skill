@@ -33,6 +33,8 @@ def detect_format(file_path: str) -> str:
         return "csv"
     if ext == ".pdf":
         return "pdf"
+    if ext in (".jpg", ".jpeg", ".png", ".webp"):
+        return "image"
 
     # Content sniffing
     try:
@@ -77,6 +79,44 @@ def import_file(
     elif fmt == "pdf":
         from pdf_importer import parse_pdf
         raw = parse_pdf(file_path, currency=currency)
+    elif fmt == "image":
+        from receipt_scanner import scan_to_transaction
+        txn = scan_to_transaction(file_path, account_id)
+        if "error" in txn.get("scan_result", {}):
+            return {
+                "error": txn["scan_result"]["error"],
+                "file": file_path,
+                "format": "image",
+            }
+        result = {
+            "file": os.path.basename(file_path),
+            "format": "image",
+            "account_id": account_id,
+            "currency": txn.get("currency", currency),
+            "total_parsed": 1,
+            "total_normalized": 1,
+            "duplicates_removed": 0,
+            "to_import": 1,
+            "preview": [txn],
+            "dry_run": dry_run,
+            "scan_confidence": txn.get("scan_result", {}).get("confidence", "low"),
+        }
+        if not dry_run:
+            add_transaction(
+                date=txn["date"],
+                type=txn.get("type", "expense"),
+                amount=txn["amount"],
+                category=txn.get("category", "other_expense"),
+                description=txn.get("description", ""),
+                account_id=account_id,
+                currency=txn.get("currency", currency),
+                payee=txn.get("payee", ""),
+                tags=txn.get("tags", []),
+                import_source="image",
+            )
+            result["imported"] = 1
+            result["dry_run"] = False
+        return result
     else:
         return {"error": f"Unknown format: {fmt}", "file": file_path}
 

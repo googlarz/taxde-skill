@@ -108,11 +108,15 @@ State the privacy line once:
 - `show my finance profile` → full profile display
 - `financial health` / `dashboard` → 7-domain health score with recommendations
 - `what's new` / `what should I focus on` → session alerts + top insight
-- `import [file]` → route to CSV/MT940/OFX/PDF import flow
+- `import [file]` → route to CSV/MT940/OFX/PDF/image import flow
+- `scan [image]` / `receipt [image]` → OCR receipt, log transaction
 - `set locale [code]` → switch tax locale (e.g. `set locale de`)
 - `privacy summary` → show data safety status
 - `generate report` / `monthly report` → run `generate_report.py`, save `.md` and `.html` to `.finance/reports/`, open HTML in browser
 - `run daily brief` → call `cowork_tasks.daily_brief()` — session alerts + critical insights
+- `cash flow forecast` / `forecast [days]` → predict balance for next N days with low-balance warnings
+- `household` / `shared budget` → shared expense tracking, settle-up
+- `annual summary` / `tax year summary` → accountant-ready HTML + markdown report
 
 ## 4a. Scheduled Tasks
 
@@ -185,6 +189,7 @@ Route flexibly. Modes can overlap.
 | Data Import | CSV, bank statement, import | Parse, preview, normalize, deduplicate, categorize |
 | Scenario Lab | what if, compare options, should I | Before/after comparison with recommendation |
 | Specialist Handoff | complex case, adviser prep | Structured brief with evidence and questions |
+| Shared Household | shared budget / household / who owes | Shared expense log, per-member balances, settle-up |
 
 ## 7. Tool Contract
 
