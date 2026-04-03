@@ -94,26 +94,12 @@ Always load and use the Finance Assistant skill /finance-assistant-skill.
 Start every session by running skill.py to load my profile and surface any alerts.
 ```
 
-**3. Grant folder access**
-Add two folders to the project's allowed paths:
-- `/path/to/finance-assistant-skill` — the skill itself (scripts, locales, SKILL.md)
-- The folder where you want `.finance/` to live (e.g. your home directory `~`)
-
-**4. Start the project**
+**3. Start the project**
 Open the Finance project and say: `What's my financial health?`
 
 Claude will load your profile, surface any session alerts (budget warnings, upcoming bills, tax deadlines), and be ready for any finance question.
 
 > **Tip:** Pin the Finance project to your Cowork sidebar so it's one click away at the start of each day.
-
----
-
-### First Session (both Claude Code and Cowork)
-
-On first run, Finance Assistant:
-1. Automatically adds `.finance/` to your `.gitignore` (prevents accidental commits of financial data)
-2. Checks file permissions and warns if they're too open
-3. Starts a lightweight onboarding to collect your profile
 
 ---
 
@@ -130,6 +116,34 @@ New locales can be contributed independently to the locales repository without t
 ---
 
 ## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Claude Code / Cowork                         │
+│                                                                 │
+│   You ──► skill.py ──► profile_manager ──► session_alerts      │
+│                │                                                │
+│                ▼                                                │
+│         ┌──────────────────────────────────────────┐           │
+│         │              11 Modes                    │           │
+│         │  Budget · Transactions · Goals           │           │
+│         │  Investments · Debt · Tax · Insurance    │           │
+│         │  Net Worth · Import · Scenarios · Handoff│           │
+│         └──────────────┬───────────────────────────┘           │
+│                        │                                        │
+│              ┌─────────▼──────────┐                            │
+│              │   scripts/*.py     │  ◄── locale plugins        │
+│              │  (real math, not   │       locales/de/          │
+│              │   hallucination)   │       locales/xx/ ...      │
+│              └─────────┬──────────┘                            │
+│                        │                                        │
+│              ┌─────────▼──────────┐                            │
+│              │    .finance/       │  local only, never uploaded │
+│              │  profile · budgets │  encrypted at rest          │
+│              │  investments · tax │  chmod 600, git-ignored     │
+│              └────────────────────┘                            │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Profile-First Architecture
 
