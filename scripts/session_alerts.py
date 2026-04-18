@@ -1,12 +1,13 @@
 """
 Session Alerts — proactive nudges surfaced at the start of every session.
 
-Checks five domains and returns a list of actionable alerts ranked by urgency:
+Checks six domains and returns a list of actionable alerts ranked by urgency:
   1. Budget overspend warnings (>80% used, >10 days left in month)
   2. Upcoming recurring payments (due in the next 7 days)
   3. Savings goal deadlines (within 30 days and underfunded)
   4. Tax deadlines (within 45 days)
   5. FIRE milestone progress (shown once per month)
+  6. User-configured threshold milestones (net worth, portfolio, debt, etc.)
 
 Usage:
     from session_alerts import get_session_alerts, format_alerts
@@ -284,6 +285,56 @@ def _fire_alert(profile: dict, today: date) -> list[dict]:
     )]
 
 
+# ── Threshold Milestone Alerts ────────────────────────────────────────────────
+
+def _threshold_alerts(profile: dict) -> list[dict]:
+    """Check user-configured thresholds against current metrics."""
+    try:
+        from threshold_alerts import check_thresholds, format_threshold_alerts
+        from net_worth_engine import calculate_net_worth
+        from investment_tracker import get_portfolio
+    except ImportError:
+        return []
+
+    try:
+        nw_data = calculate_net_worth(profile) or {}
+        portfolio_data = get_portfolio() or {}
+        holdings = portfolio_data.get("holdings", [])
+        portfolio_value = sum(
+            h.get("current_value", h.get("quantity", 0) * h.get("purchase_price", 0))
+            for h in holdings
+        )
+
+        current_metrics = {
+            "net_worth": nw_data.get("net_worth", 0),
+            "portfolio_value": portfolio_value,
+            "debt_total": nw_data.get("total_liabilities", 0),
+        }
+
+        # Add savings_rate and emergency_fund_months from profile if available
+        fin = profile.get("financial_summary", {})
+        if "savings_rate" in fin:
+            current_metrics["savings_rate"] = fin["savings_rate"]
+        if "emergency_fund_months" in fin:
+            current_metrics["emergency_fund_months"] = fin["emergency_fund_months"]
+
+        triggered = check_thresholds(current_metrics)
+        if not triggered:
+            return []
+
+        alerts = []
+        for item in triggered:
+            alerts.append(_alert(
+                "info", "milestones",
+                f"Milestone: {item.get('label', item['metric'])}",
+                f"Current: {item['current']:,.2f} (threshold: {item['threshold']:,.2f}, direction: {item['direction']})",
+                "Review your milestone or set a new higher target.",
+            ))
+        return alerts
+    except Exception:
+        return []
+
+
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
 def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
@@ -303,6 +354,7 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
     all_alerts.extend(_goal_alerts(today))
     all_alerts.extend(_tax_alerts(today, locale))
     all_alerts.extend(_fire_alert(profile, today))
+    all_alerts.extend(_threshold_alerts(profile))
 
     # Sort: critical → warning → info, then by domain
     order = {u: i for i, u in enumerate(URGENCY_LEVELS)}

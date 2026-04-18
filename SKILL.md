@@ -117,6 +117,11 @@ State the privacy line once:
 - `cash flow forecast` / `forecast [days]` → predict balance for next N days with low-balance warnings
 - `household` / `shared budget` → shared expense tracking, settle-up
 - `annual summary` / `tax year summary` → accountant-ready HTML + markdown report
+- `how does this month compare` / `vs last month` / `monthly comparison` → run `comparison_engine.get_monthly_comparison()` + `format_comparison()`
+- `save as [name]` → save current scenario via `scenario_store.save_scenario()`; `show [name] scenario` → recall with delta vs current via `scenario_store.compare_scenario_to_current()`
+- `same as before` / `same parameters` / `repeat with X` → resolved via `session_memory.get_last_query()`
+- `alert me when [metric] reaches [value]` → `threshold_alerts.set_threshold()`
+- `show my milestones` / `thresholds` → list configured thresholds via `threshold_alerts.get_thresholds()`
 
 ## 4a. Scheduled Tasks
 
@@ -190,6 +195,10 @@ Route flexibly. Modes can overlap.
 | Scenario Lab | what if, compare options, should I | Before/after comparison with recommendation |
 | Specialist Handoff | complex case, adviser prep | Structured brief with evidence and questions |
 | Shared Household | shared budget / household / who owes | Shared expense log, per-member balances, settle-up |
+| Month Comparison | how does this month compare / vs last month | Month-over-month spending delta, biggest changes, new/dropped categories |
+| Scenario Memory | recall scenario / show [name] scenario / save as [name] | scenario_store: save, load, compare with current profile delta |
+| Session Recall | same as before / same parameters / repeat with X | session_memory: resolve prior query type and params |
+| Milestone Alerts | alert me when / show my milestones / thresholds | threshold_alerts: set, list, check milestones |
 
 ## 7. Tool Contract
 
@@ -217,6 +226,8 @@ Use the repo helpers instead of hand-waving.
 | output suite | `scripts/output_builder.py` | structured deliverables |
 | document sorting | `scripts/document_sorter.py` | classify financial documents |
 | specialist handoff | `scripts/adviser_handoff.py` | structured brief for professional |
+| month comparison | `scripts/comparison_engine.py` | month-over-month spending delta |
+| ASCII visualizations | `scripts/viz.py` | embed charts in responses |
 
 ## 8. Special Protocols
 
