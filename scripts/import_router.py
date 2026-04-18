@@ -179,6 +179,20 @@ def import_file(
     return result
 
 
+def sync_bank(days_back: int = 90) -> dict:
+    """
+    Trigger: user says "sync bank" or "sync transactions".
+    Pulls latest transactions from all linked GoCardless accounts.
+    """
+    try:
+        from bank_sync import sync_all
+    except ImportError:
+        import sys
+        sys.path.insert(0, os.path.dirname(__file__))
+        from bank_sync import sync_all
+    return sync_all(days_back=days_back)
+
+
 def import_folder(
     folder_path: str,
     account_id: str = "default",

@@ -104,6 +104,7 @@ State the privacy line once:
 
 ### Help and discovery
 
+- `restart setup` / `redo onboarding` / `start over` → call `onboarding.reset_onboarding()` then present step 1
 - `what can you do` / `help` → list all 11 modes with one-line descriptions
 - `show my finance profile` → full profile display
 - `financial health` / `dashboard` → 7-domain health score with recommendations
@@ -122,6 +123,10 @@ State the privacy line once:
 - `same as before` / `same parameters` / `repeat with X` → resolved via `session_memory.get_last_query()`
 - `alert me when [metric] reaches [value]` → `threshold_alerts.set_threshold()`
 - `show my milestones` / `thresholds` → list configured thresholds via `threshold_alerts.get_thresholds()`
+- `connect bank` → GoCardless setup flow (get API key at bankaccountdata.gocardless.com)
+- `sync transactions` / `sync bank` → pull latest from all linked banks via `bank_sync.sync_all()`
+- `show linked banks` → list connected accounts + last sync time via `bank_sync.list_linked_accounts()`
+- `disconnect [bank]` → revoke access and purge stored data via `bank_sync.revoke_access()`
 
 ## 4a. Scheduled Tasks
 
@@ -183,6 +188,7 @@ Route flexibly. Modes can overlap.
 
 | Mode | Trigger | Required outcome |
 |------|---------|------------------|
+| Onboarding Wizard | new user / first run / setup / restart setup / redo onboarding | Run 7-step guided wizard via `onboarding.get_step_prompt()` + `complete_step()` |
 | Budget Manager | budget question, spending review | Budget vs actuals, category breakdown, alerts |
 | Transaction Logger | purchase, payment, income event | Classify, store, update totals + budget impact |
 | Savings Planner | emergency fund, goals, saving for X | Goal analysis, timeline projection, contribution suggestion |
@@ -228,6 +234,26 @@ Use the repo helpers instead of hand-waving.
 | specialist handoff | `scripts/adviser_handoff.py` | structured brief for professional |
 | month comparison | `scripts/comparison_engine.py` | month-over-month spending delta |
 | ASCII visualizations | `scripts/viz.py` | embed charts in responses |
+| Chart.js artifacts | `scripts/chart_builder.py` | interactive HTML charts for Cowork/Claude.ai |
+
+## Visualizations
+
+When running in Cowork or Claude.ai, present charts as HTML artifacts using `chart_builder.py`.
+When running in Claude Code terminal, use ASCII charts from `viz.py` as fallback.
+
+Call the chart builder function, then present the returned string as an HTML artifact wrapped in a
+````html` code block.
+
+| Chart | Trigger | Function |
+|-------|---------|----------|
+| Budget doughnut | budget check, spending summary | `chart_builder.budget_chart()` |
+| Portfolio allocation | show portfolio, investments | `chart_builder.portfolio_chart()` |
+| Net worth timeline | net worth, financial health | `chart_builder.net_worth_chart()` |
+| Debt payoff curves | debt optimizer | `chart_builder.debt_payoff_chart()` |
+| FIRE progress gauge | FIRE calc, retirement | `chart_builder.fire_progress_chart()` |
+| Spending trends | spending trends, last 6 months | `chart_builder.spending_trends_chart()` |
+| Month comparison | vs last month | `chart_builder.monthly_comparison_chart()` |
+| Cash flow forecast | cash flow, 90 day forecast | `chart_builder.cashflow_forecast_chart()` |
 
 ## 8. Special Protocols
 
@@ -331,6 +357,24 @@ Users can control their data with `scripts/data_safety.py`:
 - `ensure_gitignore_protection()` — add .finance/ to .gitignore (prevents accidental git commit)
 - `sanitize_for_sharing(data)` — remove all PII before sharing (for getting help)
 - `get_access_log()` — audit trail of all data access
+
+### Open Banking (GoCardless)
+
+Finance Assistant supports read-only bank sync via GoCardless (Nordigen) — free tier covers 2000+ EU/UK banks via PSD2.
+
+Security properties:
+- GoCardless API credentials (Secret ID + Secret Key) are encrypted at rest with Fernet AES before saving to `.finance/bank_sync/credentials.enc`
+- IBANs are **never stored in full** — only the last 4 digits are retained
+- Access is **read-only**: no payments, transfers, or write operations are possible
+- Access can be revoked at any time with `disconnect [bank]` — this calls `DELETE /requisitions/{id}/` and purges all local GoCardless data
+- Short-lived access tokens (24h) are cached in plain JSON (`.finance/bank_sync/token_cache.json`) — not a long-lived secret
+- Nothing is uploaded: all sync data stays in `.finance/bank_sync/` on the user's machine
+
+Setup flow:
+1. Create a free account at bankaccountdata.gocardless.com → get Secret ID + Secret Key
+2. `connect bank` → calls `bank_sync.setup_credentials()` then `create_requisition()`
+3. Open the consent link in browser to grant read-only access
+4. `sync transactions` → calls `bank_sync.sync_all()`
 
 State the privacy line in the first session:
 

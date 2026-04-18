@@ -12,6 +12,10 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
 
 from profile_manager import get_profile, display_profile
+from onboarding import (
+    is_onboarding_complete, get_current_step, get_step_prompt,
+    get_resume_message, get_completion_message, get_onboarding_state,
+)
 
 
 def _setup_security_defaults() -> None:
@@ -35,16 +39,31 @@ def main() -> str:
     _setup_security_defaults()
     profile = get_profile()
 
+    # ── Onboarding: new user (no profile created yet) ─────────────────────────
     if not profile or not profile.get("meta", {}).get("created"):
+        privacy_line = (
+            "I only store a structured summary of your financial situation in a "
+            "project-scoped profile, not your raw documents or account details. "
+            "You can delete it any time by saying \"delete my finance profile\"."
+        )
         return (
             "Welcome to Finance Assistant! I help with budgeting, savings goals, investments, "
             "debt optimization, taxes, insurance, and net worth tracking.\n\n"
-            "Your data lives only in .finance/ on your machine — nothing is ever uploaded. "
-            "You can encrypt it, export it, or delete it completely at any time.\n\n"
-            "To get started: what's your employment situation and roughly what do you earn? "
-            "I'm optimised for Germany (full tax rules for 2024-2026) but work for any country "
-            "for budgeting, investments, and debt — just with limited tax support outside Germany."
+            f"{privacy_line}\n\n"
+            + get_step_prompt("basics")
         )
+
+    # ── Onboarding: mid-wizard (profile exists but onboarding incomplete) ─────
+    onboarding_state = get_onboarding_state()
+    if onboarding_state.get("started") and not is_onboarding_complete():
+        return get_resume_message()
+
+    # ── Onboarding: just finished — show completion summary once ──────────────
+    if is_onboarding_complete() and not onboarding_state.get("completion_shown"):
+        onboarding_state["completion_shown"] = True
+        from onboarding import save_onboarding_state
+        save_onboarding_state(onboarding_state)
+        return get_completion_message(profile)
 
     profile_display = display_profile(compact=True)
 

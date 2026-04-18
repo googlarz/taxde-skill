@@ -1,6 +1,9 @@
 # Security — encryption at rest
 cryptography
 
+# Open Banking sync (GoCardless / Nordigen)
+requests
+
 # PDF and document processing
 pdfplumber
 pypdf
