@@ -263,3 +263,45 @@ def test_avg_daily_spend_with_expenses():
     assert result < 0  # should be negative (outflow)
     # 80 expense per month × 3 months / 90 days = 80/30 per day ≈ 2.67
     assert abs(result) == pytest.approx(80 * 3 / 90, abs=0.05)
+
+
+def test_avg_daily_spend_excludes_recurring_source():
+    """Transactions tagged source=recurring must not be counted in daily spend."""
+    txns = [
+        {"amount": -100.0, "type": "expense", "source": "recurring"},  # should be excluded
+        {"amount": -50.0, "type": "expense"},                           # should be included
+        {"amount": 200.0, "type": "income"},                            # income, ignored
+    ]
+    with patch("cashflow_forecast.get_transactions", return_value=txns):
+        from cashflow_forecast import _avg_daily_spend
+        result = _avg_daily_spend("test-checking")
+    assert result < 0
+    # Only the -50 expense should count: 50 * 3 months / 90 days ≈ 1.67/day
+    assert abs(result) == pytest.approx(50 * 3 / 90, abs=0.05)
+
+
+def test_avg_daily_spend_excludes_recurring_type():
+    """Transactions with type=recurring must not be counted in daily spend."""
+    txns = [
+        {"amount": -80.0, "type": "recurring"},  # excluded
+        {"amount": -20.0, "type": "expense"},     # included
+    ]
+    with patch("cashflow_forecast.get_transactions", return_value=txns):
+        from cashflow_forecast import _avg_daily_spend
+        result = _avg_daily_spend("test-checking")
+    assert result < 0
+    # Only the -20 expense counts: 20 * 3 / 90 ≈ 0.67/day
+    assert abs(result) == pytest.approx(20 * 3 / 90, abs=0.05)
+
+
+def test_avg_daily_spend_excludes_recurring_category():
+    """Transactions with category=recurring must not be counted in daily spend."""
+    txns = [
+        {"amount": -60.0, "type": "expense", "category": "recurring"},  # excluded
+        {"amount": -40.0, "type": "expense", "category": "food"},       # included
+    ]
+    with patch("cashflow_forecast.get_transactions", return_value=txns):
+        from cashflow_forecast import _avg_daily_spend
+        result = _avg_daily_spend("test-checking")
+    assert result < 0
+    assert abs(result) == pytest.approx(40 * 3 / 90, abs=0.05)

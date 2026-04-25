@@ -33,6 +33,9 @@ def test_fire_projection():
     assert result["years_to_fire"] > 0
     assert result["achievable"] is True
     assert len(result["milestones"]) > 0
+    # real_return_used must be present and differ from nominal when inflation > 0
+    assert "real_return_used" in result
+    assert result["real_return_used"] < result["annual_return_pct"]
 
 
 def test_fire_unreachable():
@@ -41,6 +44,33 @@ def test_fire_unreachable():
         annual_expenses=100000,
     )
     assert result["fire_number"] == 2500000.0
+
+
+def test_fire_inflation_affects_timeline():
+    """inflation_rate must affect the projection — real return differs from nominal."""
+    base = project_fire_timeline(
+        current_savings=50000, monthly_contribution=1500,
+        annual_expenses=30000, annual_return_pct=0.07, inflation_rate=0.0,
+    )
+    inflated = project_fire_timeline(
+        current_savings=50000, monthly_contribution=1500,
+        annual_expenses=30000, annual_return_pct=0.07, inflation_rate=0.03,
+    )
+    # With higher inflation, real return is lower → takes longer to reach FIRE
+    assert inflated["months_to_fire"] > base["months_to_fire"], (
+        "Higher inflation should increase time to FIRE"
+    )
+    assert inflated["real_return_used"] < base["real_return_used"]
+
+
+def test_fire_real_equals_nominal_when_real_false():
+    """When real=False, nominal return is used unchanged."""
+    result = project_fire_timeline(
+        current_savings=50000, monthly_contribution=1500,
+        annual_expenses=30000, annual_return_pct=0.07, inflation_rate=0.02,
+        real=False,
+    )
+    assert abs(result["real_return_used"] - 0.07) < 1e-9
 
 
 def test_debt_vs_invest():

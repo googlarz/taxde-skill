@@ -139,6 +139,8 @@ def export_all_data(export_path: Optional[str] = None, passphrase: Optional[str]
     }
 
     for root, dirs, files in os.walk(finance_dir):
+        # Exclude bank_sync/ — contains live access tokens that must not be exported
+        dirs[:] = [d for d in dirs if d != "bank_sync"]
         for f in files:
             if not f.endswith(".json"):
                 continue
@@ -151,6 +153,10 @@ def export_all_data(export_path: Optional[str] = None, passphrase: Optional[str]
     if not export_path:
         stamp = datetime.now().strftime("%Y%m%d")
         export_path = str(finance_dir.parent / f"finance-export-{stamp}.json")
+    else:
+        resolved = Path(export_path).resolve()
+        if str(resolved) in ("/", str(Path.home()), str(Path.home().parent)):
+            raise ValueError(f"export_path {export_path!r} resolves to an unsafe location.")
 
     plaintext = json.dumps(all_data, ensure_ascii=False, indent=2).encode()
 
@@ -229,7 +235,9 @@ def delete_all_data(confirm: bool = False) -> dict:
 def delete_category(category: str, confirm: bool = False) -> dict:
     """Delete a specific data category (accounts, budgets, goals, etc.)."""
     finance_dir = get_finance_dir()
-    target = finance_dir / category
+    target = (finance_dir / category).resolve()
+    if not str(target).startswith(str(finance_dir.resolve())):
+        return {"error": f"Invalid category path: {category}"}
 
     if not target.exists():
         return {"error": f"Category '{category}' not found"}
@@ -243,7 +251,7 @@ def delete_category(category: str, confirm: bool = False) -> dict:
             "confirm_message": f"Call delete_category('{category}', confirm=True) to proceed.",
         }
 
-    shutil.rmtree(target)
+    shutil.rmtree(str(target))
     _log_access("delete_category", f"Deleted category: {category}")
     return {"action": "deleted", "category": category}
 

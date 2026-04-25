@@ -222,6 +222,13 @@ def project_portfolio_growth(
             "initial_portfolio": round(current, 2),
             "total_basis": round(current + total_contributed, 2),
             "total_growth": round(balance - current - total_contributed, 2),
+            "inflation_note": (
+                "Projected values are nominal (not inflation-adjusted). "
+                "At 2% inflation, real purchasing power is ~{:.0f}% of the nominal figure after {} years.".format(
+                    100 * (1.02 ** -year), year
+                )
+            ),
+            "real_return_estimate": round((1 + annual_return_pct) / 1.02 - 1, 4),
         })
 
     return projections

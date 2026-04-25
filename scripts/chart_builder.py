@@ -19,7 +19,10 @@ _HEAD = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script
+  src="https://cdn.jsdelivr.net/npm/chart.js"
+  onerror="document.body.innerHTML='<div style=\'padding:20px;color:#e0e0e0;background:#1a1a2e;font-family:sans-serif\'><h3>&#9888; Chart could not load</h3><p>Chart.js CDN is unavailable (offline or restricted network).</p><p>The data is shown below in text form:</p><pre id=\'fallback-data\'></pre></div>'; var fd=document.getElementById('fallback-data'); if(fd) fd.textContent=window.__chartData||'No data'">
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
 <style>
   * { box-sizing: border-box; }
@@ -55,6 +58,11 @@ _FOOT = "\n</body>\n</html>"
 
 def _html(body: str) -> str:
     return _HEAD + "\n" + body + _FOOT
+
+
+def _data_script(summary: dict) -> str:
+    """Embed raw data as window.__chartData for the CDN-offline fallback."""
+    return f"<script>window.__chartData = {json.dumps(summary, default=str)};</script>"
 
 
 def _fmt(amount: float, currency: str = "EUR") -> str:
@@ -126,7 +134,10 @@ def budget_chart(categories: dict, currency: str = "EUR", month: str = None) -> 
     js_data = json.dumps(data_vals)
     js_colors = json.dumps(bg_colors)
 
-    body = f"""
+    data_summary = {"categories": {n: {"actual": a, "limit": l} for n, a, l, _, _ in table_rows},
+                    "total_spent": round(total_spent, 2), "total_limit": round(total_limit, 2)}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Budget Overview</div>
   <div class="subtitle">{subtitle_text}</div>
@@ -219,7 +230,10 @@ def portfolio_chart(holdings: list, currency: str = "EUR") -> str:
     js_h_values = json.dumps(h_values)
     js_h_colors = json.dumps(h_colors)
 
-    body = f"""
+    data_summary = {"total": round(total, 2), "asset_classes": dict(zip(cls_labels, cls_values)),
+                    "top_holdings": [{"name": n, "value": v} for n, v in zip(h_labels, h_values)]}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Portfolio Allocation</div>
   <div class="subtitle">Total value: {_fmt(total, currency)} &nbsp;·&nbsp; Weighted return: <span style="color:{'#4ade80' if weighted_return >= 0 else '#f87171'}">{weighted_return:+.1f}%</span></div>
@@ -314,7 +328,10 @@ def net_worth_chart(snapshots: list, currency: str = "EUR") -> str:
     js_assets = json.dumps(asset_data)
     js_liabs = json.dumps(liab_data)
 
-    body = f"""
+    data_summary = {"snapshots": [{"date": l, "net_worth": n, "assets": a, "liabilities": lb}
+                                  for l, n, a, lb in zip(labels, nw_data, asset_data, liab_data)]}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Net Worth Timeline</div>
   <div class="subtitle">{len(snapshots)} snapshot{"s" if len(snapshots) != 1 else ""}</div>
@@ -431,7 +448,11 @@ def debt_payoff_chart(avalanche: list, snowball: list, currency: str = "EUR") ->
     js_sb = json.dumps(sb_pts)
     interest_saved = abs(sb_interest - av_interest)
 
-    body = f"""
+    data_summary = {"avalanche_months": av_months, "snowball_months": sb_months,
+                    "avalanche_interest": round(av_interest, 2), "snowball_interest": round(sb_interest, 2),
+                    "interest_saved": round(interest_saved, 2)}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Debt Payoff Comparison</div>
   <div class="subtitle">Avalanche vs Snowball strategy</div>
@@ -553,7 +574,11 @@ def fire_progress_chart(current: float, target: float, contributions: list,
     gauge_remaining = 100 - pct
     js_gauge = json.dumps([round(pct, 2), round(gauge_remaining, 2)])
 
-    body = f"""
+    data_summary = {"current": round(current, 2), "target": round(target, 2),
+                    "progress_pct": round(pct, 2), "fire_year": fire_year,
+                    "projections": [{"year": l, "value": v} for l, v in zip(proj_labels, proj_vals)]}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">FIRE Progress</div>
   <div class="subtitle">{years_label}</div>
@@ -709,7 +734,10 @@ def spending_trends_chart(months: list, currency: str = "EUR") -> str:
     js_labels = json.dumps(month_labels)
     js_datasets = json.dumps(datasets)
 
-    body = f"""
+    data_summary = {"months": [{"month": m.get("month"), "total": round(sum(m.get("categories", {}).values()), 2),
+                                "categories": m.get("categories", {})} for m in sorted_months]}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Spending Trends</div>
   <div class="subtitle">Monthly breakdown by category</div>
@@ -770,7 +798,11 @@ def monthly_comparison_chart(current: dict, previous: dict, currency: str = "EUR
     js_deltas = json.dumps(deltas)
     js_currency = json.dumps(currency)
 
-    body = f"""
+    data_summary = {"this_month": dict(zip(all_cats, cur_vals)), "last_month": dict(zip(all_cats, prev_vals)),
+                    "total_current": round(total_cur, 2), "total_previous": round(total_prev, 2),
+                    "total_delta": round(total_delta, 2)}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Month-over-Month Comparison</div>
   <div class="subtitle">Current vs previous month</div>
@@ -935,7 +967,11 @@ def cashflow_forecast_chart(forecast: list, currency: str = "EUR") -> str:
     sign = "+" if delta >= 0 else ""
     delta_color = "#4ade80" if delta >= 0 else "#f87171"
 
-    body = f"""
+    data_summary = {"opening_balance": first_bal, "closing_balance": last_bal,
+                    "net_change": round(delta, 2), "min_balance": min_balance,
+                    "days": len(sorted_fc), "low_threshold": round(low_threshold, 2)}
+
+    body = _data_script(data_summary) + f"""
 <div class="card">
   <div class="title">Cash Flow Forecast</div>
   <div class="subtitle">Next {len(forecast)} days</div>

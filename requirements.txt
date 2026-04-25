@@ -1,16 +1,19 @@
-# Security — encryption at rest
-cryptography
+# Run `pip audit` to check for known CVEs before deploying
+# Run `pip install --upgrade pip && pip install -r requirements.txt` to update
 
-# Open Banking sync (GoCardless / Nordigen)
-requests
+# Security — encryption at rest
+cryptography>=42.0.5
 
 # PDF and document processing
-pdfplumber
-pypdf
-Pillow
-pytesseract
-pdf2image
+pdfplumber>=0.11.0
+pypdf>=4.2.0
+Pillow>=10.3.0
+pytesseract>=0.3.10
+pdf2image>=1.17.0
 
-# Bank statement import (optional — parsers fall back to regex without these)
-# mt940
-# ofxparse
+# Bank statement import
+requests>=2.31.0
+
+# Bank statement formats (optional)
+# mt940>=4.2.0
+# ofxparse>=0.21

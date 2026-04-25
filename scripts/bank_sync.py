@@ -21,13 +21,13 @@ except ImportError:
 
 try:
     from finance_storage import ensure_subdir, load_json, save_json, get_finance_dir
-    from data_safety import encrypt_file, decrypt_file
+    from data_safety import encrypt_file, decrypt_file, _derive_fernet_key, _CRYPTO_AVAILABLE
     from transaction_logger import add_transaction
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from finance_storage import ensure_subdir, load_json, save_json, get_finance_dir
-    from data_safety import encrypt_file, decrypt_file
+    from data_safety import encrypt_file, decrypt_file, _derive_fernet_key, _CRYPTO_AVAILABLE
     from transaction_logger import add_transaction
 
 
@@ -53,88 +53,100 @@ def _requisitions_path():
 
 # ── Credential management ─────────────────────────────────────────────────────
 
-def setup_credentials(secret_id: str, secret_key: str) -> dict:
+def setup_credentials(secret_id: str, secret_key: str, passphrase: str) -> dict:
     """
     Store GoCardless API credentials encrypted in .finance/bank_sync/credentials.enc.
+    passphrase: explicit caller-supplied secret used to derive the encryption key.
+                Set FINANCE_CRED_PASSPHRASE env var or pass it directly.
     Returns {"status": "ok", "message": "..."}.
     """
     if not secret_id or not secret_key:
         return {"status": "error", "message": "Both secret_id and secret_key are required."}
+    if not passphrase:
+        return {"status": "error", "message": "passphrase is required to encrypt credentials."}
+
+    if not _CRYPTO_AVAILABLE:
+        return {
+            "status": "error",
+            "message": "Encryption requires the 'cryptography' package: pip install cryptography",
+        }
+
+    import base64 as _b64
+    salt = os.urandom(16)
+    key = _derive_fernet_key(passphrase, salt)
+
+    from cryptography.fernet import Fernet
+    plaintext = json.dumps({"secret_id": secret_id, "secret_key": secret_key}).encode()
+    ciphertext = Fernet(key).encrypt(plaintext)
 
     cred_path = _credentials_path()
-    # Write as plain JSON first; encrypt_file will encrypt in place.
-    # We use a stable passphrase derived from the user's machine to avoid
-    # prompting for a passphrase every sync. The actual secret_id/secret_key
-    # are the real secrets — wrapping them in Fernet provides at-rest protection.
-    import hashlib
-    machine_salt = os.environ.get("FINANCE_CRED_PASSPHRASE") or _machine_id()
-    passphrase = hashlib.sha256(f"gocardless-{machine_salt}".encode()).hexdigest()[:32]
+    payload = json.dumps({
+        "_encrypted": "fernet",
+        "salt": _b64.b64encode(salt).decode(),
+        "data": ciphertext.decode(),
+    }).encode()
 
-    save_json(cred_path, {"secret_id": secret_id, "secret_key": secret_key})
-    cred_path.chmod(0o600)
-
+    tmp = cred_path.with_suffix(".enc.tmp")
     try:
-        encrypt_file(str(cred_path), passphrase)
-    except Exception as e:
-        # If cryptography not installed, leave plain but warn
-        return {
-            "status": "warning",
-            "message": (
-                f"Credentials saved (plain — install `cryptography` for encryption): {e}"
-            ),
-        }
+        import os as _os
+        fd = _os.open(str(tmp), _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC, 0o600)
+        with _os.fdopen(fd, "wb") as f:
+            f.write(payload)
+        tmp.replace(cred_path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
     return {
         "status": "ok",
         "message": (
             "GoCardless credentials stored encrypted at "
-            f".finance/bank_sync/credentials.enc. "
+            ".finance/bank_sync/credentials.enc. "
             "Run `connect bank` to link your first account."
         ),
     }
 
 
-def _machine_id() -> str:
-    """Return a stable machine-specific string as salt for credential encryption."""
-    try:
-        with open("/etc/machine-id") as f:
-            return f.read().strip()
-    except OSError:
-        pass
-    try:
-        import platform
-        return platform.node()
-    except Exception:
-        return "finance-assistant"
-
-
-def _load_credentials() -> dict:
-    """Decrypt and return stored credentials. Raises if not found."""
+def _load_credentials(passphrase: Optional[str] = None) -> dict:
+    """Decrypt and return stored credentials. Raises if not found or decryption fails."""
     cred_path = _credentials_path()
     if not cred_path.exists():
         raise FileNotFoundError(
             "No GoCardless credentials found. "
-            "Call setup_credentials(secret_id, secret_key) first."
+            "Call setup_credentials(secret_id, secret_key, passphrase) first."
         )
-    import hashlib
-    machine_salt = os.environ.get("FINANCE_CRED_PASSPHRASE") or _machine_id()
-    passphrase = hashlib.sha256(f"gocardless-{machine_salt}".encode()).hexdigest()[:32]
+
+    passphrase = passphrase or os.environ.get("FINANCE_CRED_PASSPHRASE")
+    if not passphrase:
+        raise ValueError(
+            "FINANCE_CRED_PASSPHRASE env var is not set. "
+            "Set it or pass passphrase explicitly."
+        )
+
+    if not _CRYPTO_AVAILABLE:
+        raise RuntimeError("Decryption requires the 'cryptography' package: pip install cryptography")
+
+    import base64 as _b64
+    with open(cred_path, "r", encoding="utf-8") as f:
+        content = json.load(f)
+
+    if content.get("_encrypted") != "fernet":
+        raise ValueError(
+            "Failed to decrypt GoCardless credentials. "
+            "Re-run 'connect bank' to reconfigure."
+        )
 
     try:
-        decrypt_file(str(cred_path), passphrase)
+        salt = _b64.b64decode(content["salt"])
+        key = _derive_fernet_key(passphrase, salt)
+        from cryptography.fernet import Fernet, InvalidToken
+        plaintext = Fernet(key).decrypt(content["data"].encode())
+        return json.loads(plaintext)
     except Exception:
-        pass  # File may already be plain (no cryptography library)
-
-    try:
-        data = load_json(cred_path)
-        if data and not data.get("_encrypted"):
-            return data
-    except Exception:
-        pass
-    raise ValueError(
-        "Failed to decrypt credentials. "
-        "If you changed machines, re-run setup_credentials()."
-    )
+        raise ValueError(
+            "Failed to decrypt GoCardless credentials. "
+            "Re-run 'connect bank' to reconfigure."
+        )
 
 
 # ── Token management ──────────────────────────────────────────────────────────
@@ -143,7 +155,8 @@ def get_access_token() -> str:
     """
     Obtain a short-lived access token using stored credentials.
     POST /token/new/ with secret_id + secret_key.
-    Cache token in .finance/bank_sync/token_cache.json with expiry.
+    Cache the access token (only) in .finance/bank_sync/token_cache.json with expiry.
+    Refresh tokens are never persisted to disk.
     Returns the access token string.
     """
     if requests is None:
@@ -173,19 +186,29 @@ def get_access_token() -> str:
     resp.raise_for_status()
     data = resp.json()
 
-    # GoCardless returns access + refresh tokens; access expires in ~24h
+    # GoCardless returns access + refresh tokens; access expires in ~24h.
+    # Only cache the short-lived access token — never persist the refresh token.
     access_expires_in = data.get("access_expires", 86400)  # seconds
     expires_at = (
         datetime.now(timezone.utc) + timedelta(seconds=access_expires_in)
     ).isoformat()
 
-    save_json(cache_path, {
+    import os as _os
+    import json as _json
+    payload = _json.dumps({
         "access": data["access"],
-        "refresh": data.get("refresh"),
         "access_expires": expires_at,
         "obtained_at": datetime.now(timezone.utc).isoformat(),
-    })
-    cache_path.chmod(0o600)
+    }).encode()
+    tmp = cache_path.with_suffix(".tmp")
+    try:
+        fd = _os.open(str(tmp), _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC, 0o600)
+        with _os.fdopen(fd, "wb") as fh:
+            fh.write(payload)
+        tmp.replace(cache_path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
     return data["access"]
 
@@ -228,6 +251,9 @@ def list_institutions(country: str = "de") -> list[dict]:
 
 # ── Requisition / consent flow ────────────────────────────────────────────────
 
+_ALLOWED_REDIRECT_URIS = {"https://localhost", "http://localhost"}
+
+
 def create_requisition(
     institution_id: str,
     redirect_uri: str = "https://localhost",
@@ -237,7 +263,14 @@ def create_requisition(
     POST /agreements/enduser/ then POST /requisitions/.
     Returns {"requisition_id": str, "link": str, "status": str}.
     The link is what the user opens in browser to grant consent.
+    redirect_uri must be one of: https://localhost, http://localhost.
     """
+    if redirect_uri not in _ALLOWED_REDIRECT_URIS:
+        raise ValueError(
+            f"redirect_uri {redirect_uri!r} is not allowed. "
+            f"Permitted values: {sorted(_ALLOWED_REDIRECT_URIS)}"
+        )
+
     if requests is None:
         raise ImportError("requests library is required: pip install requests")
 

@@ -406,3 +406,44 @@ def test_cashflow_empty():
 def test_cashflow_single_entry():
     html = cashflow_forecast_chart([{"date": "2025-04-01", "balance": 1000, "events": []}])
     _assert_valid_html(html)
+
+
+# ── Offline fallback (onerror handler) ────────────────────────────────────────
+
+def _assert_has_onerror(html: str) -> None:
+    """Every chart HTML must include the CDN onerror offline fallback."""
+    assert "onerror=" in html, "Missing onerror handler on Chart.js script tag"
+    assert "CDN is unavailable" in html or "unavailable" in html, "onerror message not found"
+    assert "window.__chartData" in html, "window.__chartData fallback data not embedded"
+
+
+def test_budget_chart_has_onerror():
+    _assert_has_onerror(budget_chart(BUDGET_DATA))
+
+
+def test_portfolio_chart_has_onerror():
+    _assert_has_onerror(portfolio_chart(HOLDINGS))
+
+
+def test_net_worth_chart_has_onerror():
+    _assert_has_onerror(net_worth_chart(NW_SNAPSHOTS))
+
+
+def test_debt_payoff_chart_has_onerror():
+    _assert_has_onerror(debt_payoff_chart(AVALANCHE, SNOWBALL))
+
+
+def test_fire_chart_has_onerror():
+    _assert_has_onerror(fire_progress_chart(150000, 500000, CONTRIBUTIONS))
+
+
+def test_spending_trends_has_onerror():
+    _assert_has_onerror(spending_trends_chart(MONTHS_DATA))
+
+
+def test_monthly_comparison_has_onerror():
+    _assert_has_onerror(monthly_comparison_chart(CURRENT, PREVIOUS))
+
+
+def test_cashflow_forecast_chart_has_onerror():
+    _assert_has_onerror(cashflow_forecast_chart(FORECAST))

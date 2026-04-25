@@ -50,7 +50,13 @@ def _avg_daily_spend(account_id: str, months: int = 3) -> float:
             target_year -= 1
 
         txns = get_transactions(account_id=account_id, year=target_year, month=target_month)
-        for t in txns:
+        # Filter out recurring-sourced transactions to avoid double-counting
+        # with recurring_engine events in the forecast
+        non_recurring = [t for t in txns
+                         if t.get("source") != "recurring"
+                         and t.get("category") != "recurring"
+                         and t.get("type") != "recurring"]
+        for t in non_recurring:
             amt = float(t.get("amount", 0))
             ttype = t.get("type", "")
             if ttype == "expense" or amt < 0:
@@ -123,6 +129,7 @@ def forecast(
             profile.get("preferences", {}).get("low_balance_threshold", _DEFAULT_LOW_THRESHOLD)
         )
 
+    # recurring_map covers scheduled items; daily_spend covers variable/discretionary spend only.
     daily_spend = _avg_daily_spend(account_id)
     recurring_map = _build_recurring_map(account_id, days)
 

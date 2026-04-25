@@ -19,6 +19,7 @@ from scripts.data_safety import (
     sanitize_for_sharing,
     export_all_data,
     delete_all_data,
+    delete_category,
 )
 from scripts.finance_storage import get_finance_dir
 
@@ -220,6 +221,52 @@ def test_sanitize_preserves_amounts():
     assert sanitized["balance"] == 9999
     assert sanitized["goal_target"] == 50000
     assert sanitized["currency"] == "EUR"
+
+
+# ── delete_category path traversal guard ─────────────────────────────────────
+
+def test_delete_category_blocks_path_traversal(isolated_finance_dir):
+    """delete_category must reject paths that escape .finance/."""
+    result = delete_category("../../escape")
+    assert "error" in result
+    assert "Invalid category path" in result["error"]
+
+
+def test_delete_category_blocks_absolute_path(isolated_finance_dir):
+    """delete_category must reject absolute paths."""
+    result = delete_category("/tmp/evil")
+    assert "error" in result
+
+
+def test_delete_category_valid_path(isolated_finance_dir):
+    """delete_category accepts a valid category name."""
+    finance_dir = get_finance_dir()
+    finance_dir.mkdir(parents=True, exist_ok=True)
+    (finance_dir / "goals").mkdir(exist_ok=True)
+    (finance_dir / "goals" / "goals.json").write_text("{}")
+
+    result = delete_category("goals", confirm=True)
+    assert result["action"] == "deleted"
+    assert not (finance_dir / "goals").exists()
+
+
+# ── export excludes bank_sync ─────────────────────────────────────────────────
+
+def test_export_excludes_bank_sync(tmp_path, isolated_finance_dir):
+    """export_all_data must not include bank_sync/ directory."""
+    finance_dir = get_finance_dir()
+    finance_dir.mkdir(parents=True, exist_ok=True)
+    (finance_dir / "finance_profile.json").write_text(json.dumps({"name": "Test"}))
+    bank_sync_dir = finance_dir / "bank_sync"
+    bank_sync_dir.mkdir(exist_ok=True)
+    (bank_sync_dir / "token_cache.json").write_text(json.dumps({"access": "SECRET_TOKEN"}))
+
+    export_path = str(tmp_path / "export.json")
+    export_all_data(export_path=export_path)
+
+    content = json.loads(Path(export_path).read_text())
+    keys = list(content.get("data", {}).keys())
+    assert not any("bank_sync" in k for k in keys), f"bank_sync leaked into export: {keys}"
 
 
 # ── Privacy Summary ───────────────────────────────────────────────────────────

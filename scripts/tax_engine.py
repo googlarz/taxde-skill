@@ -21,8 +21,20 @@ except ImportError:
     from finance_storage import get_tax_path, get_tax_claims_path, load_json, save_json
 
 
+ALLOWED_LOCALES = {"de", "uk", "fr", "nl", "pl"}
+
+
+def _validate_locale_code(locale_code: str) -> str:
+    if locale_code not in ALLOWED_LOCALES:
+        raise ValueError(
+            f"Unknown locale {locale_code!r}. Supported: {sorted(ALLOWED_LOCALES)}"
+        )
+    return locale_code
+
+
 def _load_locale(locale_code: str):
     """Dynamically import a locale plugin."""
+    _validate_locale_code(locale_code)
     try:
         return importlib.import_module(f"locales.{locale_code}")
     except ImportError:

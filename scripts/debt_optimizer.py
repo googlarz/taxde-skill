@@ -95,10 +95,13 @@ def _simulate_payoff(debts: list[dict], extra_monthly: float, order_key) -> dict
     month = 0
     schedule = []
     max_months = 600  # 50 year cap
+    freed_minimums = 0.0  # Accumulates minimums freed when debts are paid off
 
     while any(d["balance"] > 0.01 for d in active) and month < max_months:
         month += 1
-        extra_remaining = extra_monthly
+
+        # Snapshot balances before payments to detect newly paid-off debts
+        prev_balances = {d["id"]: d["balance"] for d in active}
 
         for d in active:
             if d["balance"] <= 0:
@@ -114,7 +117,16 @@ def _simulate_payoff(debts: list[dict], extra_monthly: float, order_key) -> dict
             d["balance"] -= payment
             total_paid += payment
 
-        # Apply extra to the first debt with balance (priority order)
+        # Freed minimums: debts that just reached zero this month join the pool
+        newly_freed = sum(
+            d["minimum"] for d in active
+            if d["balance"] <= 0.01 and prev_balances[d["id"]] > 0.01
+        )
+        freed_minimums += newly_freed
+
+        # Apply extra (plus all freed minimums) to the first debt with balance
+        effective_extra = extra_monthly + freed_minimums
+        extra_remaining = effective_extra
         for d in active:
             if d["balance"] <= 0 or extra_remaining <= 0:
                 continue
@@ -122,10 +134,6 @@ def _simulate_payoff(debts: list[dict], extra_monthly: float, order_key) -> dict
             d["balance"] -= extra
             total_paid += extra
             extra_remaining -= extra
-
-        # When a debt is paid off, redirect its minimum to extra
-        freed = sum(d["minimum"] for d in active if d["balance"] <= 0.01)
-        # (This is implicit in next iteration since we skip zero-balance debts)
 
         if month % 6 == 0 or month <= 3:
             schedule.append({

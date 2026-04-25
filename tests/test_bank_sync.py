@@ -98,9 +98,8 @@ class TestGetAccessToken:
         (bsd / "token_cache.json").write_text(
             json.dumps({"access": "old_token", "access_expires": past})
         )
-        (bsd / "credentials.enc").write_text(
-            json.dumps({"secret_id": "test-id", "secret_key": "test-key"})
-        )
+        # Write properly encrypted credentials using the test passphrase
+        bank_sync.setup_credentials("test-id", "test-key", "test-passphrase-12345")
         bank_sync.requests.post.return_value = _mock_response(
             {"access": "new_token_xyz", "access_expires": 86400}
         )
@@ -114,17 +113,73 @@ class TestGetAccessToken:
 
     def test_fetches_new_token_when_no_cache(self, bank_sync, finance_dir):
         """No cache file → fetch a fresh token."""
-        bsd = finance_dir / "bank_sync"
-        bsd.mkdir(parents=True, exist_ok=True)
-        (bsd / "credentials.enc").write_text(
-            json.dumps({"secret_id": "sid", "secret_key": "skey"})
-        )
+        bank_sync.setup_credentials("sid", "skey", "test-passphrase-12345")
         bank_sync.requests.post.return_value = _mock_response(
             {"access": "fresh_token", "access_expires": 3600}
         )
 
         token = bank_sync.get_access_token()
         assert token == "fresh_token"
+
+    def test_token_cache_does_not_contain_refresh_token(self, bank_sync, finance_dir):
+        """Refresh token must never be written to disk."""
+        bank_sync.setup_credentials("sid", "skey", "test-passphrase-12345")
+        bank_sync.requests.post.return_value = _mock_response(
+            {"access": "tok123", "refresh": "REFRESH_SECRET", "access_expires": 3600}
+        )
+
+        bank_sync.get_access_token()
+
+        cache_path = finance_dir / "bank_sync" / "token_cache.json"
+        cache_text = cache_path.read_text()
+        assert "REFRESH_SECRET" not in cache_text
+        assert "refresh" not in json.loads(cache_text)
+
+
+# ── 1b. setup_credentials / _load_credentials ────────────────────────────────
+
+class TestCredentials:
+    def test_setup_and_load_roundtrip(self, bank_sync, finance_dir):
+        """setup_credentials encrypts; _load_credentials decrypts correctly."""
+        result = bank_sync.setup_credentials("my-id", "my-key", "test-passphrase-12345")
+        assert result["status"] == "ok"
+
+        creds = bank_sync._load_credentials()
+        assert creds["secret_id"] == "my-id"
+        assert creds["secret_key"] == "my-key"
+
+    def test_credentials_file_is_encrypted(self, bank_sync, finance_dir):
+        """credentials.enc must not contain plaintext secret values."""
+        bank_sync.setup_credentials("secret-id", "secret-key", "test-passphrase-12345")
+        raw = (finance_dir / "bank_sync" / "credentials.enc").read_text()
+        assert "secret-id" not in raw
+        assert "secret-key" not in raw
+
+    def test_wrong_passphrase_raises(self, bank_sync, finance_dir):
+        """_load_credentials raises ValueError with wrong passphrase."""
+        import importlib
+        bank_sync.setup_credentials("id", "key", "test-passphrase-12345")
+        import os
+        with pytest.raises(ValueError, match="Failed to decrypt"):
+            bank_sync._load_credentials(passphrase="wrong-passphrase-xyz")
+
+    def test_redirect_uri_allowlist_blocks_arbitrary_uri(self, bank_sync, finance_dir):
+        """create_requisition must reject non-localhost redirect URIs."""
+        _setup_token(finance_dir)
+        with pytest.raises(ValueError, match="not allowed"):
+            bank_sync.create_requisition("BANK_ID", redirect_uri="https://evil.com/callback")
+
+    def test_redirect_uri_allowlist_accepts_localhost(self, bank_sync, finance_dir):
+        """create_requisition must accept https://localhost."""
+        _setup_token(finance_dir)
+        bank_sync.requests.post.return_value = _mock_response({
+            "id": "agr-1", "institution_id": "BANK_ID",
+        })
+        # Will error at requisitions POST but must not raise ValueError for URI
+        try:
+            bank_sync.create_requisition("BANK_ID", redirect_uri="https://localhost")
+        except ValueError as e:
+            pytest.fail(f"Unexpected ValueError for allowed URI: {e}")
 
 
 # ── 2. list_institutions ──────────────────────────────────────────────────────

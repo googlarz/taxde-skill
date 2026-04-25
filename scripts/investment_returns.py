@@ -153,27 +153,42 @@ def approximate_xirr(
 
     # Newton's method
     rate = 0.1  # Initial guess: 10%
-    for _ in range(100):
-        n = npv(rate)
+    max_iterations = 100
+    tolerance = 1e-8
+    iteration = 0
+    f_val = float("inf")
+    for iteration in range(max_iterations):
+        f_val = npv(rate)
         d = npv_derivative(rate)
         if abs(d) < 1e-12:
             break
-        new_rate = rate - n / d
+        new_rate = rate - f_val / d
         # Clamp to reasonable range
         new_rate = max(-0.99, min(10.0, new_rate))
-        if abs(new_rate - rate) < 1e-8:
+        if abs(new_rate - rate) < tolerance:
             rate = new_rate
+            f_val = npv(rate)
             break
         rate = new_rate
 
+    converged = iteration < max_iterations - 1 and abs(f_val) < tolerance
+
     return {
         "xirr_pct": round(rate * 100, 2),
+        "converged": converged,
+        "iterations": iteration,
+        "warning": None if converged else "XIRR did not converge — result may be inaccurate",
         "cashflow_count": len(all_flows),
         "first_date": all_flows[0][0].isoformat(),
         "last_date": all_flows[-1][0].isoformat(),
         "total_invested": round(sum(-cf[1] for cf in all_flows if cf[1] < 0), 2),
         "current_value": round(current_value, 2),
     }
+
+
+def xirr_value(result: dict) -> float:
+    """Extract the XIRR float from an approximate_xirr result dict (backward compatibility)."""
+    return result["xirr_pct"] / 100
 
 
 def calculate_portfolio_returns() -> dict:

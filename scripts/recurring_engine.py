@@ -7,6 +7,7 @@ auto-generates transactions when they're due.
 
 from __future__ import annotations
 
+import calendar
 import uuid
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -197,10 +198,8 @@ def _calculate_due_dates(item: dict, after: date, up_to: date) -> list[date]:
         year_offset, month_offset = divmod(start.month - 1 + months_elapsed, 12)
         current = start.replace(year=start.year + year_offset, month=month_offset + 1, day=1)
         while current <= up_to:
-            try:
-                d = current.replace(day=min(day_of_month, 28))
-            except ValueError:
-                d = current.replace(day=28)
+            max_day = calendar.monthrange(current.year, current.month)[1]
+            d = current.replace(day=min(day_of_month, max_day))
             if d > after and d <= up_to:
                 dates.append(d)
             # Next month
@@ -218,10 +217,8 @@ def _calculate_due_dates(item: dict, after: date, up_to: date) -> list[date]:
         year_offset, month_rem = divmod(month_offset, 12)
         current = start.replace(year=start.year + year_offset, month=month_rem + 1, day=1)
         while current <= up_to:
-            try:
-                d = current.replace(day=min(day_of_month, 28))
-            except ValueError:
-                d = current.replace(day=28)
+            max_day = calendar.monthrange(current.year, current.month)[1]
+            d = current.replace(day=min(day_of_month, max_day))
             if d > after and d <= up_to:
                 dates.append(d)
             month = current.month + 3

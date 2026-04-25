@@ -118,10 +118,23 @@ def project_fire_timeline(
     annual_return_pct: float = 0.07,
     withdrawal_rate: float = 0.04,
     inflation_rate: float = 0.02,
+    real: bool = True,
 ) -> dict:
-    """Project timeline to financial independence."""
+    """Project timeline to financial independence.
+
+    When real=True (default), uses the real return rate (nominal return adjusted
+    for inflation) so that projections reflect actual purchasing power rather than
+    nominal growth. Over 25 years at 7% nominal / 2% inflation, using nominal
+    returns would overstate real purchasing power by ~64%.
+
+    real_return = (1 + annual_return_pct) / (1 + inflation_rate) - 1
+    """
     fire_number = annual_expenses / withdrawal_rate
-    monthly_return = annual_return_pct / 12
+    if real:
+        real_return = (1 + annual_return_pct) / (1 + inflation_rate) - 1
+    else:
+        real_return = annual_return_pct
+    monthly_return = real_return / 12
     balance = current_savings
     months = 0
     max_months = 12 * 60  # 60 year cap
@@ -143,6 +156,8 @@ def project_fire_timeline(
         "annual_expenses": annual_expenses,
         "withdrawal_rate": withdrawal_rate,
         "annual_return_pct": annual_return_pct,
+        "inflation_rate": inflation_rate,
+        "real_return_used": round(real_return, 6),
         "milestones": milestones,
         "achievable": months < max_months,
     }

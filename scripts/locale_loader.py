@@ -13,12 +13,24 @@ from pathlib import Path
 from typing import Optional
 
 
+ALLOWED_LOCALES = {"de", "uk", "fr", "nl", "pl"}
+
+
+def _validate_locale_code(locale_code: str) -> str:
+    if locale_code not in ALLOWED_LOCALES:
+        raise ValueError(
+            f"Unknown locale {locale_code!r}. Supported: {sorted(ALLOWED_LOCALES)}"
+        )
+    return locale_code
+
+
 def _locales_dir() -> Path:
     return Path(__file__).parent.parent / "locales"
 
 
 def load_locale(locale_code: str):
     """Dynamically import a locale plugin. Raises ImportError if not found."""
+    _validate_locale_code(locale_code)
     import sys
     project_root = str(Path(__file__).parent.parent)
     if project_root not in sys.path:
@@ -49,10 +61,20 @@ def get_available_locales() -> list[str]:
 def build_locale_on_demand(locale_code: str) -> dict:
     """
     Create a skeleton locale directory for a new country.
+    Scaffolds into .finance/locales/ (not the skill installation directory).
     Returns a manifest of what was created and what needs to be populated.
     """
-    locale_dir = _locales_dir() / locale_code
-    if locale_dir.exists() and (locale_dir / "__init__.py").exists():
+    _validate_locale_code(locale_code)
+
+    try:
+        from finance_storage import get_locale_dir
+    except ImportError:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+        from finance_storage import get_locale_dir
+
+    locale_dir = get_locale_dir(locale_code)
+    if (locale_dir / "__init__.py").exists():
         return {"status": "already_exists", "path": str(locale_dir)}
 
     locale_dir.mkdir(parents=True, exist_ok=True)
@@ -101,7 +123,7 @@ def generate_tax_claims(profile: dict, year: int = None) -> list[dict]:
         "path": str(locale_dir),
         "files_created": ["__init__.py"],
         "next_steps": [
-            f"Set LOCALE_NAME, CURRENCY, and SUPPORTED_YEARS in locales/{locale_code}/__init__.py",
+            f"Set LOCALE_NAME, CURRENCY, and SUPPORTED_YEARS in .finance/locales/{locale_code}/__init__.py",
             f"Add tax_rules.py with year-specific parameters",
             f"Add tax_calculator.py with calculation logic",
             f"Add tax_dates.py with filing deadlines",
