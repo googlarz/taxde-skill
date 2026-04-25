@@ -1,6 +1,6 @@
 """
 Guided onboarding wizard for new Finance Assistant users.
-7 steps, saves progress after each step, resumable.
+9 steps, saves progress after each step, resumable.
 State stored in .finance/onboarding_state.json
 """
 
@@ -26,8 +26,10 @@ STEPS = [
     "basics",       # name, country, currency
     "employment",   # type, gross income, employer
     "housing",      # rent/own, monthly cost, location
-    "accounts",     # at least one bank account
     "goals",        # at least one savings goal
+    "debts",        # loans, credit cards, etc.
+    "investments",  # stocks, ETFs, pension, etc.
+    "accounts",     # at least one bank account
     "tax",          # locale-specific: Steuerklasse / tax code / etc.
     "budget",       # auto-suggest 50/30/20 or custom
 ]
@@ -36,8 +38,10 @@ STEP_LABELS = {
     "basics": "Basics",
     "employment": "Employment",
     "housing": "Housing",
-    "accounts": "Accounts",
     "goals": "Savings Goals",
+    "debts": "Debts",
+    "investments": "Investments",
+    "accounts": "Accounts",
     "tax": "Tax",
     "budget": "Budget",
 }
@@ -60,6 +64,17 @@ _COUNTRY_CURRENCY: dict[str, str] = {
     "ch": "CHF",
     "pl": "PLN",
     "us": "USD",
+}
+
+_LOCALE_NAMES: dict[str, str] = {
+    "de": "German",
+    "gb": "UK",
+    "fr": "French",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "at": "Austrian",
+    "ch": "Swiss",
+    "us": "US",
 }
 
 
@@ -89,7 +104,7 @@ def save_onboarding_state(state: dict) -> None:
 # ── Progress queries ──────────────────────────────────────────────────────────
 
 def is_onboarding_complete() -> bool:
-    """True if all 7 steps completed or skipped."""
+    """True if all steps completed or skipped."""
     state = get_onboarding_state()
     done = set(state.get("completed_steps", [])) | set(state.get("skipped_steps", []))
     return all(s in done for s in STEPS)
@@ -110,8 +125,8 @@ def get_step_progress() -> dict:
     Return:
     {
       "current_step": str,
-      "step_number": int,       # 1-7
-      "total_steps": int,       # 7
+      "step_number": int,       # 1-9
+      "total_steps": int,       # 9
       "completed_steps": [str],
       "remaining_steps": [str],
       "pct_complete": int,
@@ -150,87 +165,129 @@ def get_step_progress() -> dict:
 def get_step_prompt(step: str, locale: str = "de") -> str:
     """
     Return the question Claude should ask for this step.
-    Includes progress indicator and examples.
+    Warm, conversational prompts that explain what each step unlocks.
     """
     idx = STEPS.index(step) + 1 if step in STEPS else 0
     total = len(STEPS)
 
+    profile = get_profile() or {}
+    name = profile.get("personal", {}).get("name", "")
+
     if step == "basics":
         return (
-            f"Step {idx} of {total} — Let's get started!\n\n"
-            "What's your name, and which country are you in?\n"
-            "(e.g. 'I'm Alex, based in Germany' or just 'Germany' is fine)"
+            f"Step {idx} of {total} — Let's get you set up — this takes about 5 minutes, "
+            "and the more you tell me, the more specific I can be with my advice.\n\n"
+            "To start: what's your name, and which country are you based in?\n\n"
+            "(Once I know where you are, I'll automatically set up the right currency and tax rules.)"
         )
 
     if step == "employment":
+        greeting = f"Hey {name}! " if name else ""
         return (
             f"Step {idx} of {total} — Employment\n\n"
-            "Are you employed, self-employed, or freelance?\n"
-            "And roughly what's your gross annual income?\n"
-            "(e.g. 'Employed, €65k/year' or 'Freelancer, about €80k')"
+            f"{greeting}Income is the foundation of almost everything I can help with — "
+            "your tax situation, how fast you can realistically save, whether your budget makes sense.\n\n"
+            "Are you employed, self-employed, or freelance? And roughly what's your gross annual income?\n\n"
+            "(Ballpark is fine — I just need an order of magnitude. E.g. 'Employed, around €65k')"
         )
 
     if step == "housing":
         return (
             f"Step {idx} of {total} — Housing\n\n"
-            "Do you rent or own? What's your monthly housing cost (rent or mortgage)?\n"
-            "(e.g. 'Renting in Berlin, €1,200/month')"
+            "Do you rent or own? And what's your monthly housing cost — rent or mortgage payment?\n\n"
+            "This is usually the biggest line item, so getting it right matters. It also lets me benchmark "
+            "how much you're paying against typical ranges and, when the time comes, give you an honest "
+            "rent-vs-buy comparison.\n\n"
+            "(E.g. 'Renting in Berlin, €1,200/month' or 'Mortgage, €980/month')"
+        )
+
+    if step == "goals":
+        name_part = f", {name}" if name else ""
+        return (
+            f"Step {idx} of {total} — Savings Goals\n\n"
+            f"What are you working toward{name_part}?\n\n"
+            "This is where we go from just tracking money to actually doing something with it. "
+            "Tell me one thing you're saving for — an emergency fund, a house deposit, a trip, "
+            "retiring early, paying off debt, whatever's on your mind.\n\n"
+            "Give me a name, a rough target amount, and when you'd like to get there. "
+            "E.g. 'Emergency fund €10k by end of year' or 'Japan trip €3k in 8 months'. "
+            "You can add more goals later."
+        )
+
+    if step == "debts":
+        return (
+            f"Step {idx} of {total} — Debts\n\n"
+            "Any debts worth mentioning? — loans, credit cards, overdrafts, a mortgage, student debt?\n\n"
+            "This one has a big impact on advice. If you have high-interest debt, the single most useful "
+            "thing I can do is show you the optimal payoff order and exactly how much interest you can save. "
+            "Even if you're just curious, the numbers are usually eye-opening.\n\n"
+            "You can say 'no debts' or 'skip' if this doesn't apply.\n\n"
+            "(E.g. 'Credit card €3k at 18%, car loan €8k at 6%' — just rough figures)"
+        )
+
+    if step == "investments":
+        return (
+            f"Step {idx} of {total} — Investments\n\n"
+            "Do you have any investments or a pension? — stocks, ETFs, a brokerage account, "
+            "a company pension, ISA, a Riester/Rürup contract?\n\n"
+            "Even a ballpark total is useful. It lets me track your net worth properly, calculate your "
+            "FIRE timeline, and flag whether your allocation makes sense for where you're headed.\n\n"
+            "Say 'nothing yet' to skip — there's no wrong answer here.\n\n"
+            "(E.g. 'About €20k in ETFs at Scalable, plus a company pension' or 'Just starting out, nothing yet')"
         )
 
     if step == "accounts":
         return (
             f"Step {idx} of {total} — Accounts\n\n"
-            "What bank(s) do you use? I'll track balances and transactions per account.\n"
-            "(e.g. 'DKB checking, ING savings' — no account numbers needed)"
-        )
-
-    if step == "goals":
-        return (
-            f"Step {idx} of {total} — Savings Goals\n\n"
-            "What are you saving for? Name a goal, target amount, and rough timeline.\n"
-            "(e.g. 'Emergency fund €10k by end of year' or 'Trip to Japan €3k in 8 months')"
+            "Last piece of the infrastructure: what bank accounts do you have?\n\n"
+            "Just names and types — no account numbers or IBANs needed. Once I have these, I can track "
+            "your balances per account and import your bank statements directly if you want.\n\n"
+            "(E.g. 'DKB checking, ING savings' or 'Monzo current, Marcus savings')"
         )
 
     if step == "tax":
         if locale == "de":
             return (
                 f"Step {idx} of {total} — Tax\n\n"
-                "A few German tax questions:\n"
-                "• Steuerklasse (1–6)?\n"
+                "Almost done — a few quick tax questions so I can give you accurate numbers.\n\n"
+                "Germany's tax system has a few variables that change the calculation significantly:\n"
+                "• What's your Steuerklasse? (1–6)\n"
                 "• Do you pay Kirchensteuer?\n"
-                "• Bundesland? (affects Kirchensteuer rate)\n"
-                "(e.g. 'Klasse 1, no Kirchensteuer, Berlin')"
+                "• Which Bundesland are you in?\n\n"
+                "(E.g. 'Klasse 1, no Kirchensteuer, Berlin' — or just what you know, "
+                "I'll fill in defaults for the rest)"
             )
         if locale == "gb":
             return (
                 f"Step {idx} of {total} — Tax\n\n"
-                "A couple of UK tax questions:\n"
-                "• What's your tax code? (e.g. 1257L)\n"
-                "• Do you file a Self Assessment return?\n"
-                "(e.g. '1257L, no self-assessment')"
+                "Almost done — just a couple of UK tax questions.\n\n"
+                "• What's your tax code? (It's on your payslip — usually something like 1257L)\n"
+                "• Do you file a Self Assessment return?\n\n"
+                "(E.g. '1257L, no self-assessment' — skip if you're not sure, PAYE defaults are fine)"
             )
         if locale == "fr":
             return (
                 f"Step {idx} of {total} — Tax\n\n"
-                "Quelques questions sur votre situation fiscale :\n"
-                "• Situation familiale (célibataire, marié·e, pacsé·e) ?\n"
-                "• Nombre de parts fiscales ?\n"
-                "(e.g. 'Célibataire, 1 part')"
+                "Presque terminé — quelques questions fiscales rapides.\n\n"
+                "• Quelle est votre situation familiale ? (célibataire, marié·e, pacsé·e)\n"
+                "• Combien de parts fiscales ?\n\n"
+                "(Par exemple : 'Célibataire, 1 part' ou 'Marié·e avec 2 enfants, 3 parts')"
             )
         if locale == "nl":
             return (
                 f"Step {idx} of {total} — Tax\n\n"
-                "One quick Dutch tax question:\n"
-                "• Do your Box 3 assets (savings + investments) exceed €57,000?\n"
-                "(e.g. 'No, well under that threshold')"
+                "Almost there — one Dutch tax question.\n\n"
+                "Your Box 3 assets — savings and investments combined — are taxed differently if they "
+                "exceed €57,000. Do yours?\n\n"
+                "(E.g. 'No, well below that' or 'Yes, around €80k')"
             )
         if locale == "pl":
             return (
                 f"Step {idx} of {total} — Tax\n\n"
-                "Kilka pytań podatkowych:\n"
-                "• Czy masz mniej niż 26 lat? (ulga dla młodych)\n"
-                "• Czy rozliczasz się wspólnie z małżonkiem?\n"
-                "(np. 'Tak, mam 24 lata' lub 'Nie, rozliczam się samodzielnie')"
+                "Prawie gotowe — kilka szybkich pytań podatkowych.\n\n"
+                "• Czy masz mniej niż 26 lat? (ulga dla młodych — brak podatku do €85,5k)\n"
+                "• Czy rozliczasz się wspólnie z małżonkiem?\n\n"
+                "(Np. 'Tak, mam 24 lata' lub 'Nie, rozliczam się samodzielnie')"
             )
         # Generic fallback
         return (
@@ -242,7 +299,6 @@ def get_step_prompt(step: str, locale: str = "de") -> str:
         )
 
     if step == "budget":
-        profile = get_profile() or {}
         emp = profile.get("employment", {})
         gross = emp.get("annual_gross")
         currency = profile.get("meta", {}).get("primary_currency", "EUR")
@@ -253,23 +309,154 @@ def get_step_prompt(step: str, locale: str = "de") -> str:
             savings = monthly * 0.20
             income_line = (
                 f"Based on your income of {currency} {monthly:,.0f}/month, that's:\n"
-                f"  Needs {currency} {needs:,.0f} | Wants {currency} {wants:,.0f} | "
-                f"Savings {currency} {savings:,.0f}"
+                f"  • {currency} {needs:,.0f} needs / "
+                f"{currency} {wants:,.0f} wants / "
+                f"{currency} {savings:,.0f} savings"
             )
         else:
             income_line = "Enter your monthly take-home and I'll calculate the splits."
 
         return (
             f"Step {idx} of {total} — Budget\n\n"
-            "I can set up a budget automatically using the 50/30/20 rule:\n"
-            "  • 50% needs (housing, food, transport)\n"
+            "One last thing — let's set up your budget so I can track spending against it.\n\n"
+            "The simplest starting point is the 50/30/20 rule:\n"
+            "  • 50% needs (housing, food, transport, utilities)\n"
             "  • 30% wants (dining out, entertainment, subscriptions)\n"
-            "  • 20% savings & debt\n\n"
+            "  • 20% savings and debt repayment\n\n"
             f"{income_line}\n\n"
-            "Shall I use this, or would you like to adjust?"
+            "Want to go with this, or adjust the splits? (You can always change it later.)"
         )
 
     return f"Step {idx} of {total} — {STEP_LABELS.get(step, step)}\n\nLet's set up your {step}."
+
+
+# ── Value previews ────────────────────────────────────────────────────────────
+
+def get_step_value_preview(step: str, data: dict) -> str:
+    """
+    Returns a short sentence showing what just became possible after a step completes.
+    Called by the skill after complete_step() succeeds.
+    """
+    profile = get_profile() or {}
+    currency = profile.get("meta", {}).get("primary_currency", "EUR")
+
+    if step == "basics":
+        locale = data.get("locale", "de")
+        locale_name = _LOCALE_NAMES.get(locale, locale.upper())
+        return f"Got it — I've set up {currency} and {locale_name} tax rules. Let's keep going."
+
+    if step == "employment":
+        gross = data.get("gross_annual")
+        if gross:
+            # Rough effective rate: 28% for <50k, 32% for 50-80k, 35% for >80k
+            if gross < 50000:
+                rate = 0.28
+            elif gross <= 80000:
+                rate = 0.32
+            else:
+                rate = 0.35
+            takehome = int(gross * (1 - rate) / 12)
+            return (
+                f"Based on {currency} {gross:,}/year, your take-home is roughly "
+                f"{currency} {takehome:,}/month after tax. "
+                "I can sharpen this once we get to the tax step."
+            )
+        return "Got it — I'll use your income details to calibrate your plan."
+
+    if step == "housing":
+        cost = data.get("monthly_cost")
+        if cost:
+            emp = profile.get("employment", {})
+            gross = emp.get("annual_gross")
+            if gross:
+                # Use same rough take-home calculation
+                if gross < 50000:
+                    rate = 0.28
+                elif gross <= 80000:
+                    rate = 0.32
+                else:
+                    rate = 0.35
+                takehome_monthly = gross * (1 - rate) / 12
+                pct = cost / takehome_monthly * 100
+                if pct < 28:
+                    label = "well within the comfortable range"
+                elif pct <= 35:
+                    label = "on the higher side"
+                else:
+                    label = "a significant chunk"
+                return (
+                    f"Housing at {currency} {cost}/month is {pct:.0f}% of your estimated take-home — "
+                    f"{label}."
+                )
+            return f"Got it. Once I know your income I can benchmark this properly."
+        return "Got it. Once I know your income I can benchmark this properly."
+
+    if step == "goals":
+        goals = data.get("goals", [])
+        if goals:
+            g = goals[0]
+            goal_name = g.get("name", "your goal")
+            timeline = g.get("timeline", "")
+            target = g.get("target_amount")
+            if timeline:
+                return f"Love it — {goal_name} by {timeline}. I'll track your progress and let you know if you're on pace."
+            elif target:
+                return f"Love it — {goal_name} ({currency} {target:,}). I'll track your progress and let you know if you're on pace."
+            else:
+                return "Got it. Once you have a target amount in mind, I can tell you exactly what to save each month."
+        return "Got it. Once you have a target amount in mind, I can tell you exactly what to save each month."
+
+    if step == "debts":
+        if data.get("no_debts"):
+            return "Good news — no debt means all your surplus goes straight toward your goals."
+        debts = data.get("debts", [])
+        if debts:
+            total_debt = sum(d.get("balance", 0) for d in debts)
+            return (
+                f"With {currency} {total_debt:,.0f} in debt, the first thing I can look at is the "
+                "optimal payoff order. We'll do that properly once setup is done."
+            )
+        return "Got it. I'll factor this in once setup is done."
+
+    if step == "investments":
+        if data.get("no_investments"):
+            return "No problem — we'll look at investment options once you're set up."
+        investments = data.get("investments", [])
+        if investments:
+            total = sum(i.get("value", 0) for i in investments)
+            if total > 0:
+                return (
+                    f"With {currency} {total:,.0f} invested so far, your FIRE journey has already started. "
+                    "I'll track progress and flag rebalancing when needed."
+                )
+            return "Got it — I'll track your investments and flag rebalancing when needed."
+        return "No problem — we'll look at investment options once you're set up."
+
+    if step == "accounts":
+        return "Got your accounts noted. You can import statements anytime with 'import [filename]'."
+
+    if step == "tax":
+        import datetime
+        year = datetime.date.today().year
+        return f"Tax setup done. I can now run accurate projections for {year}."
+
+    if step == "budget":
+        emp = profile.get("employment", {})
+        gross = emp.get("annual_gross")
+        if gross:
+            monthly = gross / 12
+            needs = monthly * 0.50
+            wants = monthly * 0.30
+            savings = monthly * 0.20
+            return (
+                f"Budget set up: {currency} {needs:,.0f} needs / "
+                f"{currency} {wants:,.0f} wants / "
+                f"{currency} {savings:,.0f} savings per month. "
+                "I'll track against this as you log transactions."
+            )
+        return "Budget method saved. Add your income and I'll give you the actual numbers."
+
+    return f"Got it — {step} step complete."
 
 
 # ── Parse responses ───────────────────────────────────────────────────────────
@@ -292,11 +479,17 @@ def parse_step_response(step: str, user_text: str, locale: str = "de") -> dict:
     if step == "housing":
         return _parse_housing(text, lower)
 
-    if step == "accounts":
-        return _parse_accounts(text, lower)
-
     if step == "goals":
         return _parse_goals(text, lower)
+
+    if step == "debts":
+        return _parse_debts(text, lower)
+
+    if step == "investments":
+        return _parse_investments(text, lower)
+
+    if step == "accounts":
+        return _parse_accounts(text, lower)
 
     if step == "tax":
         return _parse_tax(text, lower, locale)
@@ -522,6 +715,192 @@ def _parse_goals(text: str, lower: str) -> dict:
     return result
 
 
+def _parse_debts(text: str, lower: str) -> dict:
+    """Parse debt information from user response."""
+    result: dict[str, Any] = {}
+
+    # Check for "no debts" / "debt free" / "skip"
+    if re.search(r'\b(no debts?|debt.?free|skip|none|nothing)\b', lower):
+        result["no_debts"] = True
+        return result
+
+    debts = []
+
+    # Common debt type patterns
+    debt_type_map = {
+        r'\bcredit\s*card\b': "credit_card",
+        r'\bmortgage\b': "mortgage",
+        r'\bstudent\s*(?:loan|debt)\b': "student_loan",
+        r'\bcar\s*loan\b': "loan",
+        r'\boverdraft\b': "overdraft",
+        r'\b(?:personal\s*)?loan\b': "loan",
+    }
+
+    # Rate patterns: "18%", "at 18", "18 percent"
+    def _extract_rate(context: str) -> float | None:
+        m = re.search(r'(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent)', context)
+        if m:
+            return float(m.group(1)) / 100
+        return None
+
+    # Balance patterns: reuse employment amount regex logic
+    def _extract_balance(context: str) -> float | None:
+        m = re.search(
+            r'(?:[€£$])?\s*(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(k|tsd\.?)?',
+            context
+        )
+        if m:
+            raw = m.group(1).replace(",", "").replace(".", "")
+            if "." in m.group(1):
+                parts = m.group(1).split(".")
+                if len(parts[1]) == 3:
+                    raw = m.group(1).replace(".", "")
+            try:
+                val = float(raw)
+                if m.group(2):
+                    val *= 1000
+                if val > 0:
+                    return val
+            except ValueError:
+                pass
+        return None
+
+    # Try to parse each debt mention
+    # Split by commas or "and" to handle multiple debts
+    segments = re.split(r',\s*|\s+and\s+', text)
+
+    for segment in segments:
+        seg_lower = segment.lower().strip()
+        if not seg_lower:
+            continue
+
+        debt_type = "other"
+        debt_name = None
+
+        for pattern, dtype in debt_type_map.items():
+            if re.search(pattern, seg_lower):
+                debt_type = dtype
+                # Capitalize first match as name
+                m = re.search(pattern, seg_lower)
+                if m:
+                    debt_name = m.group(0).strip().title()
+                break
+
+        if debt_name is None and not re.search(r'\d', seg_lower):
+            continue  # Skip segments with no debt type and no number
+
+        if debt_name is None:
+            # Try to infer a name from the segment
+            debt_name = seg_lower.strip().title()[:40]
+
+        balance = _extract_balance(seg_lower)
+        rate = _extract_rate(seg_lower)
+
+        if balance or rate:
+            debts.append({
+                "name": debt_name,
+                "balance": balance or 0.0,
+                "rate": rate or 0.0,
+                "type": debt_type,
+            })
+
+    if debts:
+        result["debts"] = debts
+    elif not result.get("no_debts"):
+        # No structured debts found but user didn't say "no debts" — store raw
+        result["debts_raw"] = text
+
+    return result
+
+
+def _parse_investments(text: str, lower: str) -> dict:
+    """Parse investment information from user response."""
+    result: dict[str, Any] = {}
+
+    # Check for "nothing yet" / "none" / "skip"
+    if re.search(r'\b(nothing yet|no investments?|none|skip|not yet|just starting)\b', lower):
+        result["no_investments"] = True
+        return result
+
+    investments = []
+
+    # Investment type keywords
+    type_map = [
+        (r'\betf[s]?\b', "etf"),
+        (r'\bstock[s]?\b', "stock"),
+        (r'\bpension\b', "pension"),
+        (r'\bisa\b', "isa"),
+        (r'\briester\b', "riester"),
+        (r'\br[uü]rup\b', "ruerup"),
+        (r'\bcrypto\b', "crypto"),
+        (r'\bsavings?\b', "savings"),
+        (r'\bindex\s*fund\b', "etf"),
+        (r'\bbrokerage\b', "stock"),
+    ]
+
+    def _extract_value(context: str) -> float | None:
+        m = re.search(
+            r'(?:[€£$])?\s*(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(k|tsd\.?)?',
+            context
+        )
+        if m:
+            raw = m.group(1).replace(",", "").replace(".", "")
+            if "." in m.group(1):
+                parts = m.group(1).split(".")
+                if len(parts[1]) == 3:
+                    raw = m.group(1).replace(".", "")
+            try:
+                val = float(raw)
+                if m.group(2):
+                    val *= 1000
+                return val
+            except ValueError:
+                pass
+        return None
+
+    # Split by commas, "plus", "and"
+    segments = re.split(r',\s*|\s+plus\s+|\s+and\s+', text)
+
+    for segment in segments:
+        seg_lower = segment.lower().strip()
+        if not seg_lower:
+            continue
+
+        inv_type = "other"
+        inv_name = segment.strip()
+
+        for pattern, itype in type_map:
+            if re.search(pattern, seg_lower):
+                inv_type = itype
+                # Build name: include "at Provider" if present
+                at_match = re.search(r'\bat\s+(\w+)', seg_lower)
+                type_match = re.search(pattern, seg_lower)
+                if type_match:
+                    base = type_match.group(0).upper() if len(type_match.group(0)) <= 4 else type_match.group(0).title()
+                    if at_match:
+                        inv_name = f"{base} at {at_match.group(1).title()}"
+                    else:
+                        inv_name = base
+                break
+
+        value = _extract_value(seg_lower)
+
+        # Only add if we found a known investment type
+        if inv_type != "other" or value:
+            investments.append({
+                "name": inv_name,
+                "value": value or 0.0,
+                "type": inv_type,
+            })
+
+    if investments:
+        result["investments"] = investments
+    elif not result.get("no_investments"):
+        result["investments_raw"] = text
+
+    return result
+
+
 def _parse_tax(text: str, lower: str, locale: str) -> dict:
     result: dict[str, Any] = {}
 
@@ -698,14 +1077,26 @@ def _apply_step_to_profile(step: str, data: dict) -> None:
         if updates:
             update_profile(updates)
 
+    elif step == "goals":
+        if data.get("goals"):
+            update_profile({"meta": {"onboarding_goals": data["goals"]}})
+
+    elif step == "debts":
+        if data.get("no_debts"):
+            update_profile({"meta": {"onboarding_no_debts": True}})
+        elif data.get("debts"):
+            update_profile({"meta": {"onboarding_debts": data["debts"]}})
+
+    elif step == "investments":
+        if data.get("no_investments"):
+            update_profile({"meta": {"onboarding_no_investments": True}})
+        elif data.get("investments"):
+            update_profile({"meta": {"onboarding_investments": data["investments"]}})
+
     elif step == "accounts":
         # Accounts stored in a separate file; for now save as profile note
         if data.get("accounts") or data.get("accounts_raw"):
             update_profile({"meta": {"onboarding_accounts": data.get("accounts") or data.get("accounts_raw")}})
-
-    elif step == "goals":
-        if data.get("goals"):
-            update_profile({"meta": {"onboarding_goals": data["goals"]}})
 
     elif step == "tax":
         updates = {}
@@ -752,7 +1143,7 @@ def reset_onboarding() -> None:
 
 # ── Messages ──────────────────────────────────────────────────────────────────
 
-def _progress_bar(completed: list[str], skipped: list[str], total: int = 7) -> str:
+def _progress_bar(completed: list[str], skipped: list[str], total: int = 9) -> str:
     """Render a simple text progress bar."""
     done = set(completed) | set(skipped)
     bar = ""
@@ -770,20 +1161,29 @@ def _progress_bar(completed: list[str], skipped: list[str], total: int = 7) -> s
 def get_resume_message() -> str:
     """
     For returning users mid-onboarding.
-    Shows progress bar and completed steps.
+    Shows progress and completed steps warmly.
     """
     state = get_onboarding_state()
-    progress = get_step_progress()
     completed = state.get("completed_steps", [])
     skipped = state.get("skipped_steps", [])
-    current = progress["current_step"]
+    current = get_current_step()
+    progress = get_step_progress()
     step_num = progress["step_number"]
     total = progress["total_steps"]
     bar = _progress_bar(completed, skipped)
 
-    label = STEP_LABELS.get(current, current.title()) if current != "complete" else "Done"
-    header = f"Welcome back! You're on Step {step_num} of {total} — {label}."
+    name_from_profile = get_profile().get("personal", {}).get("name", "")
+    if name_from_profile:
+        greeting = f"Welcome back, {name_from_profile}!"
+    else:
+        greeting = "Welcome back!"
+
+    done_count = len(set(completed) | set(skipped))
+    header = f"{greeting} We're partway through setup — {done_count} of {total} steps done."
     progress_line = f"Progress: {bar}"
+
+    label = STEP_LABELS.get(current, current.title()) if current != "complete" else "Done"
+    step_header = f"You're on Step {step_num} of {total} — {label}."
 
     step_status = []
     for step in STEPS:
@@ -796,7 +1196,7 @@ def get_resume_message() -> str:
         else:
             step_status.append(f"  ○ {STEP_LABELS[step]}")
 
-    lines = [header, progress_line, ""] + step_status
+    lines = [header, step_header, progress_line, ""] + step_status
 
     if current != "complete":
         lines += ["", get_step_prompt(current)]
@@ -805,99 +1205,28 @@ def get_resume_message() -> str:
 
 
 def get_completion_message(profile: dict) -> str:
-    """Final message when all 7 steps done. Summarizes the full setup."""
-    personal = profile.get("personal", {})
-    emp = profile.get("employment", {})
-    housing = profile.get("housing", {})
-    meta = profile.get("meta", {})
-    tax = profile.get("tax_profile", {})
-    prefs = profile.get("preferences", {})
+    """Final message when all steps done. Warm handoff showing what's now possible."""
+    name = profile.get("personal", {}).get("name", "")
+    greeting = f"You're all set{', ' + name if name else ''}!"
 
-    currency = meta.get("primary_currency", "EUR")
+    # Build capability list based on what's in the profile
+    capabilities = []
+    if profile.get("employment", {}).get("annual_gross"):
+        capabilities.append("💰 Tax optimization — I'll run your numbers and find what you're leaving on the table")
+    if profile.get("meta", {}).get("onboarding_goals"):
+        capabilities.append("🎯 Goal tracking — I'll tell you if you're on pace and what to adjust")
+    if profile.get("meta", {}).get("onboarding_debts"):
+        capabilities.append("📉 Debt payoff plan — optimal order to clear it fastest")
+    if profile.get("meta", {}).get("onboarding_investments"):
+        capabilities.append("📈 Portfolio + FIRE timeline — where you are and when you could retire")
+    capabilities.append("📊 Budget tracking — I'll flag overspends as they happen")
+    capabilities.append("🔔 Daily brief — I'll surface anything worth your attention at the start of each session")
 
-    # Personal line
-    name = personal.get("name", "")
-    country = personal.get("country", meta.get("locale", "").upper())
-    personal_line = f"  • Profile: {name} | {country} | {currency}" if name else f"  • Profile: {country} | {currency}"
-
-    # Employment line
-    emp_type = emp.get("type", "")
-    gross = emp.get("annual_gross")
-    gross_str = f", {currency} {gross/1000:.0f}k gross" if gross else ""
-    emp_line = f"  • Employment: {emp_type.title()}{gross_str}" if emp_type else ""
-
-    # Housing line
-    h_type = housing.get("type", "")
-    monthly = housing.get("monthly_rent_or_mortgage")
-    city = personal.get("city", "")
-    h_parts = []
-    if h_type:
-        h_parts.append(h_type.title())
-    if city:
-        h_parts.append(city)
-    if monthly:
-        h_parts.append(f"{currency} {monthly:,.0f}/month")
-    housing_line = f"  • Housing: {' '.join(h_parts)}" if h_parts else ""
-
-    # Accounts
-    state = get_onboarding_state()
-    accounts_raw = meta.get("onboarding_accounts")
-    accounts_line = ""
-    if accounts_raw:
-        if isinstance(accounts_raw, list):
-            acc_strs = [f"{a.get('bank', '?')} ({a.get('type', '?')})" for a in accounts_raw]
-            accounts_line = f"  • Accounts: {', '.join(acc_strs)}"
-        else:
-            accounts_line = f"  • Accounts: {accounts_raw}"
-
-    # Goals
-    goals_raw = meta.get("onboarding_goals")
-    goals_line = ""
-    if goals_raw and isinstance(goals_raw, list) and goals_raw:
-        g = goals_raw[0]
-        name_g = g.get("name", "Goal")
-        amount = g.get("target_amount")
-        timeline = g.get("timeline", "")
-        amount_str = f" {currency} {amount:,}" if amount else ""
-        goals_line = f"  • Goal: {name_g}{amount_str}" + (f" {timeline}" if timeline else "")
-
-    # Tax
-    tax_class = tax.get("tax_class")
-    church = tax.get("church_tax")
-    region = personal.get("region", "")
-    tax_parts = []
-    if tax_class:
-        tax_parts.append(f"Steuerklasse {tax_class}")
-    if region:
-        tax_parts.append(region)
-    if church is not None:
-        tax_parts.append("Kirchensteuer" if church else "no Kirchensteuer")
-    tax_line = f"  • Tax: {', '.join(tax_parts)}" if tax_parts else ""
-
-    # Budget
-    budget_method = prefs.get("budgeting_method", "50-30-20")
-    budget_line = ""
-    if gross and budget_method == "50-30-20":
-        monthly_income = gross / 12
-        needs = monthly_income * 0.50
-        wants = monthly_income * 0.30
-        savings = monthly_income * 0.20
-        budget_line = (
-            f"  • Budget: 50/30/20 → "
-            f"Needs {currency} {needs:,.0f} | "
-            f"Wants {currency} {wants:,.0f} | "
-            f"Savings {currency} {savings:,.0f}"
-        )
-    elif budget_method:
-        budget_line = f"  • Budget: {budget_method}"
-
-    detail_lines = [l for l in [personal_line, emp_line, housing_line, accounts_line, goals_line, tax_line, budget_line] if l]
-    details = "\n".join(detail_lines)
+    cap_text = "\n".join(capabilities)
 
     return (
-        "You're all set!\n\n"
-        "Here's what I've set up:\n"
-        f"{details}\n\n"
-        "What would you like to do first? Try:\n"
-        "  'show my financial health'  or  'what can I deduct this year?'"
+        f"{greeting} Here's what I can help you with now:\n\n"
+        f"{cap_text}\n\n"
+        "What do you want to start with? You could say 'show my financial health', "
+        "'what's my tax situation', or just ask whatever's on your mind."
     )

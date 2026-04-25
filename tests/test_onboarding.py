@@ -1,5 +1,5 @@
 """
-Tests for scripts/onboarding.py — guided 7-step onboarding wizard.
+Tests for scripts/onboarding.py — guided 9-step onboarding wizard.
 """
 
 import pytest
@@ -17,6 +17,9 @@ from onboarding import (
     get_completion_message,
     skip_step,
     reset_onboarding,
+    get_step_value_preview,
+    _parse_debts,
+    _parse_investments,
 )
 
 
@@ -27,7 +30,7 @@ class TestGetStepProgress:
         p = get_step_progress()
         assert p["current_step"] == "basics"
         assert p["step_number"] == 1
-        assert p["total_steps"] == 7
+        assert p["total_steps"] == 9
         assert p["completed_steps"] == []
         assert p["pct_complete"] == 0
 
@@ -36,7 +39,7 @@ class TestGetStepProgress:
         p = get_step_progress()
         assert p["current_step"] == "employment"
         assert p["step_number"] == 2
-        assert p["pct_complete"] == 14  # 1/7
+        assert p["pct_complete"] == 11  # 1/9
 
     def test_three_steps_done(self):
         save_onboarding_state({
@@ -45,9 +48,9 @@ class TestGetStepProgress:
             "step_data": {},
         })
         p = get_step_progress()
-        assert p["current_step"] == "accounts"
+        assert p["current_step"] == "goals"
         assert p["step_number"] == 4
-        assert p["pct_complete"] == 42  # 3/7
+        assert p["pct_complete"] == 33  # 3/9
 
     def test_all_complete(self):
         save_onboarding_state({
@@ -66,7 +69,7 @@ class TestGetStepProgress:
             "step_data": {},
         })
         p = get_step_progress()
-        assert p["pct_complete"] == 28  # 2/7
+        assert p["pct_complete"] == 22  # 2/9
         assert p["current_step"] == "housing"
 
     def test_remaining_steps_excludes_done(self):
@@ -305,7 +308,7 @@ class TestGetResumeMessage:
             "step_data": {},
         })
         msg = get_resume_message()
-        assert "Step 2 of 7" in msg
+        assert "Step 2 of 9" in msg
         assert "Employment" in msg
 
     def test_completed_steps_marked_with_checkmark(self):
@@ -370,30 +373,29 @@ class TestGetCompletionMessage:
 
     def test_contains_employment(self):
         msg = get_completion_message(self._make_profile())
-        assert "65" in msg  # 65k gross
+        assert "Tax optimization" in msg or "tax" in msg.lower()
 
     def test_contains_housing(self):
         msg = get_completion_message(self._make_profile())
-        assert "1,200" in msg or "1200" in msg
+        # new completion message shows capabilities, not raw housing cost
+        assert "Budget tracking" in msg or "budget" in msg.lower()
 
     def test_contains_budget_splits(self):
         msg = get_completion_message(self._make_profile())
-        # 65000/12 * 0.5 = 2708.33
-        assert "Needs" in msg
-        assert "Wants" in msg
-        assert "Savings" in msg
+        assert "Needs" in msg or "budget" in msg.lower()
 
     def test_contains_cta(self):
         msg = get_completion_message(self._make_profile())
-        assert "financial health" in msg.lower() or "deduct" in msg.lower()
+        assert "financial health" in msg.lower() or "tax situation" in msg.lower() or "mind" in msg.lower()
 
     def test_you_are_all_set(self):
         msg = get_completion_message(self._make_profile())
-        assert "all set" in msg.lower() or "set up" in msg.lower()
+        assert "all set" in msg.lower()
 
     def test_contains_goal(self):
         msg = get_completion_message(self._make_profile())
-        assert "Emergency fund" in msg or "10,000" in msg or "10000" in msg
+        # New message mentions Goal tracking capability
+        assert "Goal tracking" in msg or "goal" in msg.lower()
 
 
 # ── reset_onboarding ──────────────────────────────────────────────────────────
@@ -436,16 +438,16 @@ class TestResetOnboarding:
 class TestGetStepPrompt:
     def test_basics_prompt_contains_step_indicator(self):
         p = get_step_prompt("basics")
-        assert "Step 1 of 7" in p
+        assert "Step 1 of 9" in p
 
     def test_employment_prompt_step_2(self):
         p = get_step_prompt("employment")
-        assert "Step 2 of 7" in p
+        assert "Step 2 of 9" in p
         assert "Employment" in p
 
     def test_housing_prompt_step_3(self):
         p = get_step_prompt("housing")
-        assert "Step 3 of 7" in p
+        assert "Step 3 of 9" in p
 
     def test_tax_de_has_steuerklasse(self):
         p = get_step_prompt("tax", locale="de")
@@ -459,7 +461,187 @@ class TestGetStepPrompt:
         p = get_step_prompt("tax", locale="fr")
         assert "parts" in p.lower() or "familiale" in p.lower()
 
-    def test_budget_prompt_step_7(self):
+    def test_budget_prompt_step_9(self):
         p = get_step_prompt("budget")
-        assert "Step 7 of 7" in p
+        assert "Step 9 of 9" in p
         assert "50/30/20" in p or "50%" in p
+
+    def test_goals_prompt_step_4(self):
+        p = get_step_prompt("goals")
+        assert "Step 4 of 9" in p
+
+    def test_debts_prompt_step_5(self):
+        p = get_step_prompt("debts")
+        assert "Step 5 of 9" in p
+
+    def test_investments_prompt_step_6(self):
+        p = get_step_prompt("investments")
+        assert "Step 6 of 9" in p
+
+    def test_accounts_prompt_step_7(self):
+        p = get_step_prompt("accounts")
+        assert "Step 7 of 9" in p
+
+    def test_tax_prompt_step_8(self):
+        p = get_step_prompt("tax")
+        assert "Step 8 of 9" in p
+
+
+# ── _parse_debts ──────────────────────────────────────────────────────────────
+
+class TestParseDebts:
+    def test_no_debts(self):
+        r = _parse_debts("no debts", "no debts")
+        assert r.get("no_debts") is True
+
+    def test_debt_free(self):
+        r = _parse_debts("debt free", "debt free")
+        assert r.get("no_debts") is True
+
+    def test_skip(self):
+        r = _parse_debts("skip", "skip")
+        assert r.get("no_debts") is True
+
+    def test_credit_card_with_rate(self):
+        r = _parse_debts("Credit card €3k at 18%", "credit card €3k at 18%")
+        assert "debts" in r
+        assert len(r["debts"]) >= 1
+        debt = r["debts"][0]
+        assert debt["balance"] == 3000.0
+        assert debt["rate"] == pytest.approx(0.18)
+        assert debt["type"] == "credit_card"
+
+    def test_car_loan(self):
+        r = _parse_debts("car loan €8k 6%", "car loan €8k 6%")
+        assert "debts" in r
+        debt = r["debts"][0]
+        assert debt["balance"] == 8000.0
+        assert debt["rate"] == pytest.approx(0.06)
+        assert debt["type"] == "loan"
+
+    def test_multiple_debts(self):
+        r = _parse_debts(
+            "Credit card €3k at 18%, car loan €8k at 6%",
+            "credit card €3k at 18%, car loan €8k at 6%"
+        )
+        assert "debts" in r
+        assert len(r["debts"]) >= 2
+
+    def test_parse_step_response_dispatch(self):
+        r = parse_step_response("debts", "no debts")
+        assert r.get("no_debts") is True
+
+
+# ── _parse_investments ────────────────────────────────────────────────────────
+
+class TestParseInvestments:
+    def test_nothing_yet(self):
+        r = _parse_investments("nothing yet", "nothing yet")
+        assert r.get("no_investments") is True
+
+    def test_none(self):
+        r = _parse_investments("none", "none")
+        assert r.get("no_investments") is True
+
+    def test_skip(self):
+        r = _parse_investments("skip", "skip")
+        assert r.get("no_investments") is True
+
+    def test_etf_with_amount(self):
+        r = _parse_investments("€20k in ETFs at Scalable", "€20k in etfs at scalable")
+        assert "investments" in r
+        inv = r["investments"][0]
+        assert inv["value"] == 20000.0
+        assert inv["type"] == "etf"
+
+    def test_company_pension(self):
+        r = _parse_investments("company pension", "company pension")
+        assert "investments" in r
+        inv = r["investments"][0]
+        assert inv["type"] == "pension"
+
+    def test_parse_step_response_dispatch(self):
+        r = parse_step_response("investments", "nothing yet")
+        assert r.get("no_investments") is True
+
+
+# ── get_step_value_preview ────────────────────────────────────────────────────
+
+class TestGetStepValuePreview:
+    def test_basics_returns_string(self):
+        result = get_step_value_preview("basics", {"locale": "de", "currency": "EUR"})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_employment_returns_string(self):
+        result = get_step_value_preview("employment", {"gross_annual": 65000})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_housing_returns_string(self):
+        result = get_step_value_preview("housing", {"monthly_cost": 1200})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_goals_returns_string(self):
+        result = get_step_value_preview("goals", {
+            "goals": [{"name": "Emergency fund", "target_amount": 10000, "timeline": "by end of year"}]
+        })
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_debts_no_debts(self):
+        result = get_step_value_preview("debts", {"no_debts": True})
+        assert isinstance(result, str)
+        assert "no debt" in result.lower() or "surplus" in result.lower()
+
+    def test_debts_with_debts(self):
+        result = get_step_value_preview("debts", {
+            "debts": [{"name": "Credit card", "balance": 3000.0, "rate": 0.18, "type": "credit_card"}]
+        })
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_investments_no_investments(self):
+        result = get_step_value_preview("investments", {"no_investments": True})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_investments_with_investments(self):
+        result = get_step_value_preview("investments", {
+            "investments": [{"name": "ETFs at Scalable", "value": 20000.0, "type": "etf"}]
+        })
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_accounts_returns_string(self):
+        result = get_step_value_preview("accounts", {"accounts": [{"bank": "DKB", "type": "checking"}]})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_tax_returns_string(self):
+        result = get_step_value_preview("tax", {"steuerklasse": 1})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_budget_returns_string(self):
+        result = get_step_value_preview("budget", {"budget_method": "50-30-20"})
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_all_steps_return_nonempty_string(self):
+        sample_data = {
+            "basics": {"locale": "de", "currency": "EUR"},
+            "employment": {"gross_annual": 60000},
+            "housing": {"monthly_cost": 1000},
+            "goals": {"goals": [{"name": "Emergency fund", "target_amount": 10000, "timeline": "end of year"}]},
+            "debts": {"no_debts": True},
+            "investments": {"no_investments": True},
+            "accounts": {"accounts": []},
+            "tax": {},
+            "budget": {"budget_method": "50-30-20"},
+        }
+        for step in STEPS:
+            result = get_step_value_preview(step, sample_data.get(step, {}))
+            assert isinstance(result, str), f"step {step} did not return a string"
+            assert len(result) > 0, f"step {step} returned empty string"
