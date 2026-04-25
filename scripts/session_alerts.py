@@ -366,6 +366,40 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
     except Exception:
         pass  # Timeline must never crash alerts
 
+    # Accountability nudges
+    try:
+        from accountability_engine import get_accountability_alerts
+        from db import get_conn
+        _severity_to_urgency = {"high": "critical", "medium": "warning", "low": "info"}
+        with get_conn() as conn:
+            for item in get_accountability_alerts(conn):
+                urgency = _severity_to_urgency.get(item.get("severity", "low"), "info")
+                all_alerts.append(_alert(
+                    urgency,
+                    "accountability",
+                    item.get("message", ""),
+                    item.get("suggestion", item.get("detail", "")),
+                    item.get("action", ""),
+                ))
+    except Exception:
+        pass  # Accountability must never crash alerts
+
+    # Cash flow overdraft risk alerts
+    try:
+        from overdraft_detector import get_cashflow_alerts
+        from db import get_conn
+        with get_conn() as conn:
+            for item in get_cashflow_alerts(conn):
+                all_alerts.append(_alert(
+                    item.get("urgency", "info"),
+                    item.get("domain", "cashflow"),
+                    item.get("title", "Cash flow alert"),
+                    item.get("detail", ""),
+                    item.get("action", ""),
+                ))
+    except Exception:
+        pass  # Cashflow alerts must never crash the session
+
     # Sort: critical → warning → info, then by domain
     order = {u: i for i, u in enumerate(URGENCY_LEVELS)}
     all_alerts.sort(key=lambda a: (order.get(a["urgency"], 99), a["domain"]))
