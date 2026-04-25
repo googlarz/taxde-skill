@@ -18,6 +18,23 @@ from onboarding import (
 )
 
 
+def _setup_db() -> None:
+    """Bootstrap SQLite DB and run migration on first run."""
+    try:
+        from db import init_db, is_initialized
+        from db_migrate import migrate_all
+        from finance_storage import get_finance_dir
+
+        if not is_initialized():
+            init_db()
+            finance_dir = get_finance_dir()
+            migrate_all(finance_dir)
+        else:
+            init_db()  # ensure schema is current (no-op if up to date)
+    except Exception:
+        pass  # DB bootstrap must never crash the skill
+
+
 def _setup_security_defaults() -> None:
     """Run once-per-session security hygiene: gitignore guard + permission check."""
     try:
@@ -36,6 +53,7 @@ def _setup_security_defaults() -> None:
 
 def main() -> str:
     """Called at skill load time. Returns initial greeting or status."""
+    _setup_db()
     _setup_security_defaults()
     profile = get_profile()
 

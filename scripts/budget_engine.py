@@ -22,6 +22,14 @@ except ImportError:
     from currency import format_money
 
 
+def _db_available() -> bool:
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
+
+
 BUDGET_METHODS = {
     "custom":      "Custom category limits",
     "50-30-20":    "50% needs, 30% wants, 20% savings",
@@ -77,12 +85,122 @@ def create_budget(
             "savings": round(income_target * 0.20, 2),
         }
 
+    # Dual-write: upsert category rows to SQLite, then write JSON backup
+    if _db_available():
+        try:
+            from db import get_conn
+            month_key = f"{year}-{month:02d}" if month else str(year)
+            limits = budget.get("category_limits", {})
+            with get_conn() as conn:
+                for cat, limit_val in limits.items():
+                    conn.execute(
+                        """INSERT INTO budget_categories
+                           (month, category, limit_amount, actual_amount, currency)
+                           VALUES (?, ?, ?, 0, ?)
+                           ON CONFLICT(month, category) DO UPDATE SET
+                               limit_amount = excluded.limit_amount,
+                               currency = excluded.currency""",
+                        (month_key, cat, float(limit_val), currency),
+                    )
+        except Exception:
+            pass
+
     save_json(get_budget_path(year, month), budget)
     return budget
 
 
 def get_budget(year: int, month: Optional[int] = None) -> Optional[dict]:
+    """Load budget. Reads from SQLite if available, reconstructs dict; else JSON."""
+    if _db_available():
+        try:
+            from db import get_conn
+            month_key = f"{year}-{month:02d}" if month else str(year)
+            with get_conn() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM budget_categories WHERE month = ?", (month_key,)
+                ).fetchall()
+            if rows:
+                limits = {r["category"]: r["limit_amount"] for r in rows}
+                actuals = {
+                    r["category"]: {"spent": r["actual_amount"], "earned": 0.0, "count": 0}
+                    for r in rows
+                }
+                currency = rows[0]["currency"] if rows else "EUR"
+                return {
+                    "year": year,
+                    "month": month,
+                    "method": "custom",
+                    "currency": currency,
+                    "income_target": 0.0,
+                    "category_limits": limits,
+                    "actuals": actuals,
+                }
+        except Exception:
+            pass
     return load_json(get_budget_path(year, month))
+
+
+def update_actual(month: str, category: str, amount: float) -> bool:
+    """Update actual_amount for a budget category row in SQLite + JSON.
+    month: 'YYYY-MM' or 'YYYY'
+    Returns True on success.
+    """
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute(
+                    """UPDATE budget_categories
+                       SET actual_amount = ?
+                       WHERE month = ? AND category = ?""",
+                    (round(amount, 2), month, category),
+                )
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def get_variance(month: str) -> list[dict]:
+    """Return limit vs actual per category for a month key ('YYYY-MM' or 'YYYY').
+    Reads from SQLite if available, else falls back to get_budget_variance.
+    """
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM budget_categories WHERE month = ? ORDER BY category",
+                    (month,),
+                ).fetchall()
+            return [
+                {
+                    "category": r["category"],
+                    "limit": r["limit_amount"],
+                    "actual": r["actual_amount"],
+                    "variance": round(r["limit_amount"] - r["actual_amount"], 2),
+                    "pct_used": round(
+                        (r["actual_amount"] / r["limit_amount"] * 100)
+                        if r["limit_amount"] > 0
+                        else 0,
+                        1,
+                    ),
+                }
+                for r in rows
+            ]
+        except Exception:
+            pass
+    # JSON fallback: parse the month key
+    parts = month.split("-")
+    year = int(parts[0])
+    m = int(parts[1]) if len(parts) > 1 else None
+    result = get_budget_variance(year, m)
+    cats = result.get("categories", {})
+    return [
+        {"category": c, "limit": v["planned"], "actual": v["actual"],
+         "variance": v["variance"], "pct_used": v["pct_used"]}
+        for c, v in cats.items()
+    ]
 
 
 def update_budget_actuals(

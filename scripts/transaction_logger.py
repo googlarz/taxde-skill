@@ -23,6 +23,14 @@ except ImportError:
     from currency import format_money
 
 
+def _db_available() -> bool:
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
+
+
 # ── Category definitions ─────────────────────────────────────────────────────
 
 EXPENSE_CATEGORIES = {
@@ -179,6 +187,32 @@ def add_transaction(
     })
     txn.update(kwargs)
 
+    # Dual-write: SQLite first, then JSON backup
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute(
+                    """INSERT OR IGNORE INTO transactions
+                       (id, account_id, date, amount, currency,
+                        category, description, source, payee, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        txn["id"],
+                        txn["account_id"],
+                        txn["date"],
+                        txn["amount"],
+                        txn["currency"],
+                        txn.get("category"),
+                        txn.get("description"),
+                        txn.get("import_source", "manual"),
+                        txn.get("payee"),
+                        datetime.now().isoformat(),
+                    ),
+                )
+        except Exception:
+            pass  # SQLite write failure must not block JSON write
+
     transactions = _load_transactions(account_id, year)
     transactions.append(txn)
     transactions.sort(key=lambda t: t.get("date", ""))
@@ -197,8 +231,37 @@ def get_transactions(
     category: Optional[str] = None,
     type: Optional[str] = None,
 ) -> list[dict]:
-    """Retrieve filtered transactions."""
+    """Retrieve filtered transactions. Reads from SQLite if available, else JSON."""
     year = year or datetime.now().year
+
+    if _db_available():
+        try:
+            from db import get_conn
+            clauses = ["account_id = ?", "date LIKE ?"]
+            params: list = [account_id, f"{year}-%"]
+            if month:
+                clauses.append("date LIKE ?")
+                params.append(f"{year}-{month:02d}-%")
+            if category:
+                clauses.append("category = ?")
+                params.append(category)
+            where = " AND ".join(clauses)
+            with get_conn() as conn:
+                rows = conn.execute(
+                    f"SELECT * FROM transactions WHERE {where} ORDER BY date",
+                    params,
+                ).fetchall()
+            txns = [dict(r) for r in rows]
+            if type:
+                # 'type' is not stored in DB; derive from amount sign
+                if type == "income":
+                    txns = [t for t in txns if float(t.get("amount", 0)) >= 0]
+                elif type == "expense":
+                    txns = [t for t in txns if float(t.get("amount", 0)) < 0]
+            return txns
+        except Exception:
+            pass  # fall through to JSON
+
     txns = _load_transactions(account_id, year)
     if month:
         txns = [t for t in txns if t.get("date", "")[5:7] == f"{month:02d}"]
@@ -284,7 +347,39 @@ def _format_transaction_added(txn: dict) -> str:
 
 
 def deduplicate(new_transactions: list[dict], existing_transactions: list[dict]) -> list[dict]:
-    """Remove likely duplicates based on date + amount + description."""
+    """Remove likely duplicates based on date + amount + description.
+    Uses SQLite EXISTS check when DB is available (faster); falls back to in-memory set.
+    """
+    if _db_available():
+        try:
+            from db import get_conn
+            unique = []
+            with get_conn() as conn:
+                for t in new_transactions:
+                    txn_id = t.get("id", "")
+                    if txn_id:
+                        exists = conn.execute(
+                            "SELECT 1 FROM transactions WHERE id = ? LIMIT 1", (txn_id,)
+                        ).fetchone()
+                        if not exists:
+                            unique.append(t)
+                    else:
+                        # Fall back to date+amount+description key
+                        key_date = t.get("date", "")
+                        key_amt = round(float(t.get("amount", 0)), 2)
+                        key_desc = (t.get("description") or "").lower()[:50]
+                        exists = conn.execute(
+                            """SELECT 1 FROM transactions
+                               WHERE date=? AND amount=? AND LOWER(SUBSTR(description,1,50))=?
+                               LIMIT 1""",
+                            (key_date, key_amt, key_desc),
+                        ).fetchone()
+                        if not exists:
+                            unique.append(t)
+            return unique
+        except Exception:
+            pass  # fall through to in-memory dedup
+
     existing_keys = set()
     for t in existing_transactions:
         key = (t.get("date"), round(float(t.get("amount", 0)), 2), (t.get("description") or "").lower()[:50])

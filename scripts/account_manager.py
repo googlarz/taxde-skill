@@ -21,6 +21,14 @@ except ImportError:
     from currency import format_money
 
 
+def _db_available() -> bool:
+    try:
+        from db import is_initialized
+        return is_initialized()
+    except Exception:
+        return False
+
+
 ACCOUNT_TYPES = {
     "checking":    "Checking Account",
     "savings":     "Savings Account",
@@ -69,11 +77,36 @@ def _save_accounts(accounts: list[dict]) -> None:
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def get_accounts() -> list[dict]:
+def list_accounts() -> list[dict]:
+    """List all accounts. Reads from SQLite if available, else JSON."""
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                rows = conn.execute("SELECT * FROM accounts ORDER BY name").fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            pass
     return _load_accounts()
 
 
+def get_accounts() -> list[dict]:
+    return list_accounts()
+
+
 def get_account(account_id: str) -> Optional[dict]:
+    """Get a single account by id. Reads from SQLite if available."""
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                row = conn.execute(
+                    "SELECT * FROM accounts WHERE id = ?", (account_id,)
+                ).fetchone()
+            if row:
+                return dict(row)
+        except Exception:
+            pass
     for acc in _load_accounts():
         if acc["id"] == account_id:
             return acc
@@ -102,9 +135,47 @@ def add_account(account_data: dict) -> dict:
     if new["type"] in ("loan", "mortgage", "credit_card"):
         new["is_asset"] = False
 
+    # Dual-write: SQLite then JSON backup
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute(
+                    """INSERT OR REPLACE INTO accounts
+                       (id, name, type, balance, currency, institution, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        new["id"],
+                        new["name"],
+                        new["type"],
+                        float(new.get("current_balance") or 0),
+                        new.get("currency", "EUR"),
+                        new.get("institution"),
+                        new["as_of"],
+                    ),
+                )
+        except Exception:
+            pass
+
     accounts.append(new)
     _save_accounts(accounts)
     return new
+
+
+def update_balance(account_id: str, balance: float) -> Optional[dict]:
+    """Update only the balance of an account. Dual-writes to SQLite + JSON."""
+    now = datetime.now().date().isoformat()
+    if _db_available():
+        try:
+            from db import get_conn
+            with get_conn() as conn:
+                conn.execute(
+                    "UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?",
+                    (round(balance, 2), now, account_id),
+                )
+        except Exception:
+            pass
+    return update_account(account_id, {"current_balance": round(balance, 2)})
 
 
 def update_account(account_id: str, updates: dict) -> Optional[dict]:
@@ -114,6 +185,17 @@ def update_account(account_id: str, updates: dict) -> Optional[dict]:
             acc.update(updates)
             acc["as_of"] = datetime.now().date().isoformat()
             accounts[i] = acc
+            # Dual-write balance to SQLite
+            if _db_available() and "current_balance" in updates:
+                try:
+                    from db import get_conn
+                    with get_conn() as conn:
+                        conn.execute(
+                            "UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?",
+                            (float(updates["current_balance"]), acc["as_of"], account_id),
+                        )
+                except Exception:
+                    pass
             _save_accounts(accounts)
             return acc
     return None

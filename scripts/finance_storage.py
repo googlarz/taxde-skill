@@ -174,6 +174,53 @@ def save_json(path: Path, data: Any) -> Path:
     return path
 
 
+# ── SQLite helpers ───────────────────────────────────────────────────────────
+
+def load_from_db(table: str, filters: dict | None = None) -> list[dict]:
+    """Read rows from SQLite table, filtered by column equality.
+    Falls back to empty list if DB not available.
+    """
+    try:
+        from db import get_conn, is_initialized
+        if not is_initialized():
+            return []
+        clauses = []
+        params = []
+        if filters:
+            for col, val in filters.items():
+                clauses.append(f"{col} = ?")
+                params.append(val)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        with get_conn() as conn:
+            rows = conn.execute(f"SELECT * FROM {table}{where}", params).fetchall()
+            return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def save_to_db(table: str, data: dict, pk_col: str = "id") -> bool:
+    """Upsert a single row into a SQLite table.
+    Returns True on success, False on failure.
+    """
+    try:
+        from db import get_conn, is_initialized
+        if not is_initialized():
+            return False
+        cols = list(data.keys())
+        placeholders = ", ".join("?" for _ in cols)
+        col_names = ", ".join(cols)
+        updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c != pk_col)
+        sql = (
+            f"INSERT INTO {table} ({col_names}) VALUES ({placeholders}) "
+            f"ON CONFLICT({pk_col}) DO UPDATE SET {updates}"
+        )
+        with get_conn() as conn:
+            conn.execute(sql, [data[c] for c in cols])
+        return True
+    except Exception:
+        return False
+
+
 # ── Migration from .taxde/ ───────────────────────────────────────────────────
 
 def get_legacy_taxde_dir() -> Path:

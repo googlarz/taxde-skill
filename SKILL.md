@@ -127,6 +127,10 @@ State the privacy line once:
 - `sync transactions` / `sync bank` → pull latest from all linked banks via `bank_sync.sync_all()`
 - `show linked banks` → list connected accounts + last sync time via `bank_sync.list_linked_accounts()`
 - `disconnect [bank]` → revoke access and purge stored data via `bank_sync.revoke_access()`
+- `simulate my FIRE plan` → 10,000 simulations, shows probability of retiring by target year via `monte_carlo.simulate("fire", ...)`
+- `what's the probability I reach my goal?` → Monte Carlo savings goal simulation via `monte_carlo.simulate("savings_goal", ...)`
+- `simulate debt payoff` → Monte Carlo debt payoff distribution via `monte_carlo.simulate("debt_payoff", ...)`
+- `simulate net worth` → Monte Carlo 10-year net worth projection via `monte_carlo.simulate("net_worth", ...)`
 
 ## 4a. Scheduled Tasks
 
@@ -205,6 +209,7 @@ Route flexibly. Modes can overlap.
 | Scenario Memory | recall scenario / show [name] scenario / save as [name] | scenario_store: save, load, compare with current profile delta |
 | Session Recall | same as before / same parameters / repeat with X | session_memory: resolve prior query type and params |
 | Milestone Alerts | alert me when / show my milestones / thresholds | threshold_alerts: set, list, check milestones |
+| Monte Carlo Simulator | monte carlo / simulate / probability / what are my chances / simulate my FIRE plan / what's the probability I reach my goal | runs `monte_carlo.simulate()` for the relevant scenario; returns distribution + success probability |
 
 ## 7. Tool Contract
 
@@ -228,6 +233,7 @@ Use the repo helpers instead of hand-waving.
 | currency | `scripts/currency.py` | multi-currency conversion |
 | insights | `scripts/insight_engine.py` | cross-domain financial insights |
 | scenarios | `scripts/scenario_engine.py` | salary, mortgage, FIRE, rent-vs-buy comparisons |
+| Monte Carlo | `scripts/monte_carlo.py` | probability distributions for FIRE, savings goal, debt payoff, net worth |
 | workspace | `scripts/workspace_builder.py` | financial health dashboard |
 | output suite | `scripts/output_builder.py` | structured deliverables |
 | document sorting | `scripts/document_sorter.py` | classify financial documents |
