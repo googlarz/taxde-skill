@@ -81,15 +81,12 @@ def main() -> str:
 
     # ── Onboarding: new user (no profile created yet) ─────────────────────────
     if not profile or not profile.get("meta", {}).get("created"):
-        privacy_line = (
-            "I only store a structured summary of your financial situation in a "
-            "project-scoped profile, not your raw documents or account details. "
-            "You can delete it any time by saying \"delete my finance profile\"."
-        )
         return (
-            "Welcome to Finance Assistant! I help with budgeting, savings goals, investments, "
-            "debt optimization, taxes, insurance, and net worth tracking.\n\n"
-            f"{privacy_line}\n\n"
+            "Hey! I'm your Finance Assistant — think of me as a financially literate friend "
+            "who can help you make sense of your money: budgets, savings goals, investments, "
+            "debt, taxes, the works.\n\n"
+            "I keep a private profile with just the essentials — no raw documents, no account "
+            "numbers. You can delete everything with one command any time.\n\n"
             + get_step_prompt("basics")
         )
 

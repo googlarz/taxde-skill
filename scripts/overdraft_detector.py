@@ -196,10 +196,17 @@ def detect_overdraft_risk(
         else:
             trigger_part = ""
 
-        message = (
-            f"Balance may drop to €{bal:,.0f} on {month_str} — "
-            f"{days_from_now} days from now.{trigger_part}"
-        )
+        timing = "in 2 days" if days_from_now <= 2 else f"{days_from_now} days from now"
+        if bal < 0:
+            message = (
+                f"Heads up — your balance could go negative on {month_str} ({timing}), "
+                f"hitting around €{bal:,.0f}.{trigger_part}"
+            )
+        else:
+            message = (
+                f"Your balance looks tight around {month_str} ({timing}) — "
+                f"projected at €{bal:,.0f}.{trigger_part}"
+            )
 
         risks.append({
             "date": snap["date"],

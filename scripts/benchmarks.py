@@ -142,10 +142,26 @@ def get_savings_rate_context(rate: float, locale: str = "default") -> Optional[d
 
     pct_str = f"{rate:.0%}"
     avg_str = f"{average:.0%}"
-    message = (
-        f"Your savings rate of {pct_str} is {label} — {percentile} for {locale_name} households. "
-        f"Average is {avg_str}."
-    )
+    if label == "excellent":
+        message = (
+            f"Your savings rate of {pct_str} is excellent — that puts you in the {percentile} "
+            f"for {locale_name} households. The average is around {avg_str}, so you're well ahead."
+        )
+    elif label == "good":
+        message = (
+            f"Your savings rate of {pct_str} is solid — above average for {locale_name} households "
+            f"(average is {avg_str})."
+        )
+    elif label == "average":
+        message = (
+            f"Your savings rate of {pct_str} is roughly in line with the {locale_name} average of {avg_str}. "
+            f"Room to grow, but not a red flag."
+        )
+    else:
+        message = (
+            f"Your savings rate of {pct_str} is below the {locale_name} average of {avg_str}. "
+            f"That's worth working on — even a few percent makes a big difference over time."
+        )
 
     return {
         "metric": "savings_rate",
@@ -169,26 +185,26 @@ def get_emergency_fund_context(months_covered: float) -> Optional[dict]:
     if months_covered < 1.0:
         label = "critical"
         message = (
-            f"Your emergency fund covers {months_covered:.1f} months — critical. "
-            f"Aim for at least {recommended_min:.0f} months of expenses."
+            f"Your emergency fund covers about {months_covered:.1f} months of expenses — "
+            f"that's not much of a cushion. Building to {recommended_min:.0f} months should be a priority."
         )
     elif months_covered < recommended_min:
         label = "low"
         message = (
-            f"Your emergency fund covers {months_covered:.1f} months — below the recommended "
-            f"minimum of {recommended_min:.0f} months."
+            f"You have {months_covered:.1f} months of expenses covered — better than nothing, "
+            f"but below the recommended {recommended_min:.0f} months. Worth building up when you can."
         )
     elif months_covered < bench["p90"]:
         label = "adequate"
         message = (
-            f"Your emergency fund covers {months_covered:.1f} months — adequate. "
-            f"The recommended range is 3–6 months."
+            f"Your emergency fund covers {months_covered:.1f} months — that's in the recommended "
+            f"3–6 month range. You're in good shape here."
         )
     else:
         label = "strong"
         message = (
-            f"Your emergency fund covers {months_covered:.1f} months — strong. "
-            f"You exceed the recommended 6-month target."
+            f"You've got {months_covered:.1f} months of expenses covered — that's a strong "
+            f"emergency fund. Beyond 6 months, excess cash might work harder in investments."
         )
 
     return {
@@ -211,20 +227,29 @@ def get_dti_context(total_debt: float, annual_gross_income: float) -> Optional[d
 
     if ratio < bench["low"]:
         label = "healthy"
-        note = "Well within mortgage qualification limits."
-        message = f"Your DTI ratio is {ratio:.2f} — healthy. {note}"
+        message = (
+            f"Your debt-to-income ratio is {ratio:.2f} — that's healthy. "
+            f"If you ever want a mortgage, you're well within the typical qualification range."
+        )
     elif ratio < bench["moderate"]:
         label = "moderate"
-        note = f"Below the {bench['moderate']:.0%} mortgage qualification threshold."
-        message = f"Your DTI ratio is {ratio:.2f} — moderate. {note}"
+        message = (
+            f"Your DTI ratio is {ratio:.2f} — manageable. You're still below the "
+            f"{bench['moderate']:.0%} threshold most lenders use, but worth keeping an eye on."
+        )
     elif ratio < bench["high"]:
         label = "high"
-        note = f"Above the {bench['moderate']:.0%} mortgage qualification threshold — lenders may be cautious."
-        message = f"Your DTI ratio is {ratio:.2f} — high. {note}"
+        message = (
+            f"Your DTI ratio is {ratio:.2f} — on the high side. This is above the "
+            f"{bench['moderate']:.0%} mortgage qualification threshold, which could make "
+            f"borrowing harder. Paying down debt should be a priority."
+        )
     else:
         label = "critical"
-        note = "Financial stress territory — prioritise debt reduction."
-        message = f"Your DTI ratio is {ratio:.2f} — critical. {note}"
+        message = (
+            f"Your DTI ratio is {ratio:.2f} — that's in financial stress territory. "
+            f"I'd make reducing this the top priority before anything else."
+        )
 
     return {
         "metric": "dti",
@@ -247,20 +272,22 @@ def get_housing_cost_context(monthly_housing: float, monthly_net_income: float) 
     if ratio < bench["comfortable"]:
         label = "comfortable"
         message = (
-            f"Your housing costs are {ratio:.0%} of net income — comfortable "
-            f"(below the {bench['comfortable']:.0%} guideline)."
+            f"Housing is taking up {ratio:.0%} of your net income — that's comfortable, "
+            f"well below the {bench['comfortable']:.0%} guideline."
         )
     elif ratio < bench["stretched"]:
         label = "stretched"
         message = (
-            f"Your housing costs are {ratio:.0%} of net income — stretched "
-            f"(between {bench['comfortable']:.0%} and {bench['stretched']:.0%})."
+            f"Housing is {ratio:.0%} of your net income — a bit stretched. "
+            f"The comfortable zone is below {bench['comfortable']:.0%}, so you're above it "
+            f"but not in crisis territory."
         )
     else:
         label = "stressed"
         message = (
-            f"Your housing costs are {ratio:.0%} of net income — stressed "
-            f"(above the {bench['stretched']:.0%} Eurostat affordability threshold)."
+            f"Housing is taking {ratio:.0%} of your net income — above the "
+            f"{bench['stretched']:.0%} affordability threshold. That's a significant chunk "
+            f"and worth thinking about, especially if you're trying to save."
         )
 
     return {

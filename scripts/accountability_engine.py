@@ -97,9 +97,14 @@ def check_budget_patterns(conn: sqlite3.Connection) -> list[dict]:
                 "category": cat,
                 "months_over": consecutive,
                 "avg_overspend_pct": avg_pct_r,
-                "message": f"{cat} over budget {consecutive} months running (avg +{avg_pct_r}%)",
+                "message": (
+                    f"Your {cat} spending has been over budget {consecutive} months in a row "
+                    f"— about {avg_pct_r}% over on average. That's starting to look like a "
+                    f"habit rather than a one-off."
+                ),
                 "suggestion": (
-                    f"Consider raising the limit to €{suggested:.0f} or reviewing habits"
+                    f"Either raise the limit to around €{suggested:.0f} to reflect reality, "
+                    f"or let's talk about what's driving it."
                 ),
             })
 
@@ -143,7 +148,8 @@ def check_overdue_commitments(conn: sqlite3.Connection) -> list[dict]:
             "due_date": row["due_date"],
             "days_overdue": days_over,
             "message": (
-                f"Commitment '{row['title']}' was due {days_over} day{'s' if days_over != 1 else ''} ago"
+                f"You said you'd {row['title'].lower()} — that was due "
+                f"{days_over} day{'s' if days_over != 1 else ''} ago. Still on the list?"
             ),
         })
     return alerts
@@ -213,9 +219,9 @@ def check_goal_drift(conn: sqlite3.Connection) -> list[dict]:
             "months_remaining": months_remaining,
             "shortfall_per_month": round(shortfall, 2),
             "message": (
-                f"Goal '{row['name']}' is behind pace — saving €{actual_monthly:.0f}/mo "
-                f"but needs €{required_monthly:.0f}/mo "
-                f"({months_remaining} months left)"
+                f"Your '{row['name']}' goal is falling behind — you've been putting in "
+                f"about €{actual_monthly:.0f}/month, but you need €{required_monthly:.0f}/month "
+                f"to hit it in time. That's {months_remaining} months from now."
             ),
         })
     return alerts
@@ -290,8 +296,9 @@ def check_savings_rate_trend(conn: sqlite3.Connection) -> list[dict]:
         "current_rate": round(current_rate, 4),
         "peak_rate": round(peak_rate, 4),
         "message": (
-            f"Savings rate has declined for {months_declining} months in a row "
-            f"(now {current_rate*100:.1f}%, peak {peak_rate*100:.1f}%)"
+            f"Your savings rate has been drifting down {months_declining} months in a row — "
+            f"you're at {current_rate*100:.1f}% now, compared to {peak_rate*100:.1f}% at the peak. "
+            f"Worth understanding what changed."
         ),
     }]
 
@@ -361,8 +368,9 @@ def check_category_creep(conn: sqlite3.Connection) -> list[dict]:
             "prior_avg": round(prior_avg, 2),
             "pct_increase": round(pct_increase, 1),
             "message": (
-                f"{cat} spending up {pct_increase:.0f}% "
-                f"(€{recent_avg:.0f}/mo recently vs €{prior_avg:.0f}/mo before)"
+                f"Your {cat} spending has crept up {pct_increase:.0f}% — "
+                f"averaging €{recent_avg:.0f}/month lately versus €{prior_avg:.0f}/month before. "
+                f"Could be fine, but worth a look."
             ),
         })
 
