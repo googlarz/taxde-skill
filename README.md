@@ -1,6 +1,6 @@
 # Finance Assistant Skill
 
-> Personal finance copilot for **Claude Code** and **Claude Cowork** — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, and scenario modeling. Privacy-first: all data stays on your machine, encrypted at rest.
+> Personal finance copilot for **Claude Code** and **Claude Cowork** — budgets, savings goals, investments, debt optimization, taxes, insurance, net worth, bank import, scenario modeling, and Monte Carlo projections. Privacy-first: all data stays on your machine, encrypted at rest and backed by SQLite.
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## What It Does
 
-Finance Assistant covers the full personal finance lifecycle across 11 operating modes:
+Finance Assistant covers the full personal finance lifecycle across 12 operating modes:
 
 | Mode | What you say | What you get |
 |------|-------------|-------------|
@@ -30,11 +30,12 @@ Finance Assistant covers the full personal finance lifecycle across 11 operating
 | **Savings Planner** | "I want to save €10k for a trip" | Timeline projection, monthly contribution needed |
 | **Investment Tracker** | "show my portfolio" | Allocation, total return, XIRR, rebalance suggestions |
 | **Debt Optimizer** | "best way to pay off my debts?" | Avalanche vs snowball comparison, debt-free date, interest saved |
-| **Tax Module** | "what can I deduct?" | Locale-specific deductions (German 2024-2026 bundled) |
+| **Tax Module** | "what can I deduct?" | Locale-specific deductions (DE/UK/FR/NL/PL bundled) |
 | **Insurance Reviewer** | "do I have enough coverage?" | Coverage gap analysis, renewal alerts |
 | **Net Worth Dashboard** | "where do I stand?" | Net worth with 7-domain health score and trend |
 | **Data Import** | "import this DKB CSV" | Parse → preview → categorize → deduplicate → import |
 | **Scenario Lab** | "should I rent or buy?" | Before/after comparison with multi-year projection |
+| **Monte Carlo** | "what's my FIRE confidence?" | 10,000-simulation distribution with p10/p50/p90 outcomes |
 | **Specialist Handoff** | complex case | Structured brief for a Steuerberater or financial adviser |
 
 ### Proactive Session Alerts
@@ -109,7 +110,15 @@ Tax rules and social contribution logic live in locale plugins — country-speci
 
 Locales are maintained in a separate git submodule at **https://github.com/googlarz/finance-assistant-locales**. The `--recurse-submodules` flag in the clone command above pulls them automatically.
 
-The **German locale (`de`)** is bundled with full 2024–2026 support, covering income tax, social contributions, deduction discovery, filing deadlines, and GKV/PKV thresholds.
+| Locale | Coverage |
+|--------|---------|
+| **`de`** — Germany | Income tax, Soli, GKV/PKV social contributions, deductions, filing deadlines 2024–2026 |
+| **`uk`** — United Kingdom | Income tax bands, NI Class 1, personal allowance taper (£100k–£125,140) 2024–2026 |
+| **`fr`** — France | Quotient familial, décote, IR tranches, CSG/CRDS with assiette réduite (Art. L136-2 CSS) |
+| **`nl`** — Netherlands | Box 1/2/3, heffingskorting, arbeidskorting (Box 3 Kerstarrest note included) |
+| **`pl`** — Poland | Polski Ład reform: 12%/32%, 30k PLN free amount, składka zdrowotna |
+
+All locales are validated against **29 official tax authority test cases** (BMF, HMRC, DGFiP, Belastingdienst, KAS). Run `python3 -m pytest locales/validation/ -v` to verify.
 
 New locales can be contributed independently to the locales repository without touching the main skill code. See the [locales repo](https://github.com/googlarz/finance-assistant-locales) for the plugin interface, provenance format, and contribution guide.
 
@@ -125,22 +134,24 @@ New locales can be contributed independently to the locales repository without t
 │                │                                                │
 │                ▼                                                │
 │         ┌──────────────────────────────────────────┐           │
-│         │              11 Modes                    │           │
+│         │              12 Modes                    │           │
 │         │  Budget · Transactions · Goals           │           │
 │         │  Investments · Debt · Tax · Insurance    │           │
-│         │  Net Worth · Import · Scenarios · Handoff│           │
+│         │  Net Worth · Import · Monte Carlo        │           │
+│         │  Scenarios · Handoff                     │           │
 │         └──────────────┬───────────────────────────┘           │
 │                        │                                        │
 │              ┌─────────▼──────────┐                            │
 │              │   scripts/*.py     │  ◄── locale plugins        │
-│              │  (real math, not   │       locales/de/          │
-│              │   hallucination)   │       locales/xx/ ...      │
+│              │  (real math, not   │    locales/de · uk · fr    │
+│              │   hallucination)   │    locales/nl · pl · ...   │
 │              └─────────┬──────────┘                            │
 │                        │                                        │
 │              ┌─────────▼──────────┐                            │
-│              │    .finance/       │  local only, never uploaded │
-│              │  profile · budgets │  encrypted at rest          │
-│              │  investments · tax │  chmod 600, git-ignored     │
+│              │  SQLite + .finance/ │  local only, never uploaded│
+│              │  profile · budgets  │  encrypted at rest         │
+│              │  investments · tax  │  chmod 600, git-ignored    │
+│              │  (12-table WAL DB)  │  auto-migrates from JSON   │
 │              └────────────────────┘                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -192,28 +203,34 @@ All amounts use the `Money` class (backed by `Decimal`) to avoid floating-point 
 
 All data is project-local in `.finance/`. No cloud sync, no external APIs, no telemetry.
 
+As of v3.0, the primary store is **SQLite** (`finance.db`, WAL mode). JSON files are kept as a human-readable backup and for compatibility; new writes go to both.
+
 ```
 .finance/
-├── finance_profile.json          # Core profile (employment, housing, goals, preferences)
+├── finance.db                    # SQLite database (12 tables, WAL mode, FK constraints)
+│                                 # tables: profile, accounts, transactions, budget_categories,
+│                                 #         goals, holdings, debts, snapshots, recurring_items,
+│                                 #         scenarios, thresholds, insurance_policies
+├── finance_profile.json          # JSON mirror of profile (human-readable backup)
 ├── accounts/
-│   ├── accounts.json             # Account registry (no IBANs stored)
+│   ├── accounts.json             # Account registry mirror
 │   └── transactions/
-│       └── <account>_<year>.json # Transaction log by account and year
+│       └── <account>_<year>.json # Transaction log mirror
 ├── budgets/
-│   ├── 2025.json                 # Annual budget
-│   └── 2025-04.json             # Monthly budget with actuals
+│   ├── 2025.json                 # Annual budget mirror
+│   └── 2025-04.json             # Monthly budget mirror
 ├── goals/
-│   └── goals.json               # Savings goals with progress
+│   └── goals.json               # Savings goals mirror
 ├── investments/
-│   ├── portfolio.json            # Holdings with current values
+│   ├── portfolio.json            # Holdings mirror
 │   └── snapshots/
 │       └── 2025-04-01.json      # Point-in-time portfolio snapshots
 ├── debt/
-│   ├── debts.json               # Debt registry with rates and balances
+│   ├── debts.json               # Debt registry mirror
 │   └── payoff_plans/
 │       └── <plan_id>.json       # Avalanche/snowball simulation results
 ├── insurance/
-│   └── policies.json            # Insurance policies and renewal dates
+│   └── policies.json            # Insurance policies mirror
 ├── net_worth/
 │   └── snapshots/
 │       └── 2025-04-01.json      # Monthly net worth snapshots
@@ -229,6 +246,10 @@ All data is project-local in `.finance/`. No cloud sync, no external APIs, no te
 └── audit/
     └── access_log.json           # Audit trail of all data access
 ```
+
+### Migration
+
+On first boot after upgrading to v3.0, `skill.py` automatically migrates all existing JSON data into SQLite using `db_migrate.py`. The migration is idempotent — safe to re-run, uses `INSERT OR IGNORE`.
 
 **What is never stored:**
 - Bank login credentials, passwords, PINs, TANs
@@ -412,7 +433,20 @@ The privacy statement is shown once:
 | `tax_engine.py` | Country-agnostic interface, delegates to locale plugin via `importlib` |
 | `locale_registry.py` | Rule provenance (source URL, verification date, confidence) |
 | `locale_loader.py` | Dynamic locale import, on-demand skeleton builder for new countries |
-| `locales/de/` | Full German locale (2024-2026, all parameters filled) — via submodule (finance-assistant-locales) |
+| `locales/de/` | German locale: income tax, Soli, social contributions, 2024–2026 |
+| `locales/uk/` | UK locale: income tax, NI, personal allowance taper £100k–£125,140 |
+| `locales/fr/` | French locale: quotient familial, décote, CSG/CRDS assiette réduite |
+| `locales/nl/` | Dutch locale: Box 1/2/3, heffingskorting, arbeidskorting, Box 3 uncertainty |
+| `locales/pl/` | Polish locale: Polski Ład 12%/32%, 30k PLN free amount, składka zdrowotna |
+| `locales/validation/` | 29 official test cases (BMF, HMRC, DGFiP, Belastingdienst, KAS) — all pass |
+
+### Data & Simulation
+
+| Module | Purpose |
+|--------|---------|
+| `db.py` | 12-table SQLite schema, WAL mode, `get_conn()` context manager |
+| `db_migrate.py` | Idempotent JSON → SQLite migration (`INSERT OR IGNORE`) |
+| `monte_carlo.py` | 10,000-simulation Monte Carlo: FIRE, savings, debt payoff, net worth |
 
 ### Import
 
@@ -491,6 +525,26 @@ FA:   Avalanche (highest rate first):
         Choose snowball only if you need the win of a quick first payoff.
 ```
 
+### Monte Carlo FIRE Projection
+
+```
+You:  What's my FIRE confidence level?
+FA:   Running 10,000 simulations (return 7%±12%, inflation 2%±0.8%)...
+
+      Retirement probability: 73% success at 2042 target
+      ┌─────────────────────────────────┐
+      │  p10   €420k  ████             │
+      │  p25   €580k  ██████           │
+      │  p50   €790k  ████████         │  ← median
+      │  p75  €1.05M  ██████████       │
+      │  p90  €1.38M  █████████████    │
+      └─────────────────────────────────┘
+      Current: €180k target: €900k
+
+      Sequence risk: worst 10% of runs hit a bad first decade.
+      Mitigation: +€200/month raises success to 81%.
+```
+
 ### Tax Deductions (German)
 
 ```
@@ -512,8 +566,18 @@ FA:   Profile: angestellt, Berlin, homeoffice 3 days/week
 ## Running Tests
 
 ```bash
+# Full suite (main + locales + official validation)
+python3 -m pytest tests/ locales/tests/ locales/validation/ -q
+# 861 tests — all modules, all locales, all official tax authority cases
+
+# Main skill only
 python3 -m pytest tests/ -v
-# 154 tests — all modules, all scenarios
+
+# Locale tax tests
+python3 -m pytest locales/tests/ -v
+
+# Official validation (BMF / HMRC / DGFiP / Belastingdienst / KAS)
+python3 -m pytest locales/validation/ -v
 ```
 
 Tests use an isolated `.finance/` directory per test via the `isolated_finance_dir` autouse fixture — they never touch real data.
@@ -522,11 +586,15 @@ Key test files:
 
 | File | What it tests |
 |------|-------------|
-| `test_data_safety.py` | Encryption roundtrip, wrong passphrase, unique salts, permissions, git guard, encrypted export, sanitize |
-| `test_session_alerts.py` | Budget warnings, goal deadline alerts, urgency sorting |
-| `test_locale_de.py` | German tax calculation, 2026 parameters all non-null |
-| `test_import_system.py` | CSV/MT940/OFX parsing, bank detection, deduplication |
-| `test_scenario_engine.py` | FIRE, salary comparison, rent-vs-buy, debt-vs-invest |
-| `test_workspace_builder.py` | 7-domain health score calculation |
-| `test_investment_tracker.py` | FIRE number, portfolio growth projection, snapshots |
-| `test_debt_optimizer.py` | Avalanche vs snowball, interest savings, debt-free date |
+| `tests/test_data_safety.py` | Encryption roundtrip, wrong passphrase, unique salts, permissions, git guard, encrypted export, sanitize |
+| `tests/test_session_alerts.py` | Budget warnings, goal deadline alerts, urgency sorting |
+| `tests/test_scenario_engine.py` | FIRE, salary comparison, rent-vs-buy, debt-vs-invest |
+| `tests/test_investment_tracker.py` | FIRE number, portfolio growth projection, snapshots |
+| `tests/test_debt_optimizer.py` | Avalanche vs snowball, interest savings, debt-free date |
+| `tests/test_db.py` | SQLite schema init, CRUD operations, idempotent migration |
+| `tests/test_monte_carlo.py` | All 4 simulators, percentile ordering, probability bounds, seeded reproducibility |
+| `tests/test_recurring_engine.py` | Calendar-aware day clamping (Feb 28/29, Apr 30, Mar 31) |
+| `locales/tests/test_de_tax.py` | German income tax, Soli, social contributions, 2024–2026 |
+| `locales/tests/test_fr_tax.py` | French quotient familial, décote, CSG assiette réduite |
+| `locales/tests/test_validation.py` | Official authority validation runner across all 5 locales |
+| `locales/validation/*/` | 29 cases from BMF, HMRC, DGFiP, Belastingdienst, KAS |
