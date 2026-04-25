@@ -356,6 +356,16 @@ def get_session_alerts(profile: Optional[dict] = None) -> list[dict]:
     all_alerts.extend(_fire_alert(profile, today))
     all_alerts.extend(_threshold_alerts(profile))
 
+    # Timeline narrative bullets as info alerts
+    try:
+        from timeline_engine import build_timeline_context
+        timeline = build_timeline_context(months=24)
+        for bullet in timeline.get("narrative_bullets", []):
+            if bullet and "No historical data" not in bullet:
+                all_alerts.append(_alert("info", "timeline", "Trend insight", bullet))
+    except Exception:
+        pass  # Timeline must never crash alerts
+
     # Sort: critical → warning → info, then by domain
     order = {u: i for i, u in enumerate(URGENCY_LEVELS)}
     all_alerts.sort(key=lambda a: (order.get(a["urgency"], 99), a["domain"]))

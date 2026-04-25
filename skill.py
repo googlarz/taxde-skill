@@ -18,8 +18,12 @@ from onboarding import (
 )
 
 
+_timeline_ctx: dict = {}
+
+
 def _setup_db() -> None:
     """Bootstrap SQLite DB and run migration on first run."""
+    global _timeline_ctx
     try:
         from db import init_db, is_initialized
         from db_migrate import migrate_all
@@ -33,6 +37,24 @@ def _setup_db() -> None:
             init_db()  # ensure schema is current (no-op if up to date)
     except Exception:
         pass  # DB bootstrap must never crash the skill
+
+    # Load timeline context if there is enough history
+    try:
+        from timeline_engine import build_timeline_context, get_monthly_summary
+        from db import get_conn
+        with get_conn() as conn:
+            summary = get_monthly_summary(conn, months=3)
+        # Count months that have any transactions
+        populated = [m for m in summary if m["income"] > 0 or m["expenses"] > 0]
+        if len(populated) >= 3:
+            _timeline_ctx = build_timeline_context(months=24)
+    except Exception:
+        pass  # Timeline must never crash the skill
+
+
+def get_timeline_context() -> dict:
+    """Return the cached timeline context (or empty dict if not loaded)."""
+    return _timeline_ctx
 
 
 def _setup_security_defaults() -> None:
